@@ -144,7 +144,7 @@
     }
 
 
-    const filteredResults = results.filter(r => r.pop >= 50);
+    const filteredResults = results.filter(r => r.pop >= 10);
     updateDashboard(filteredResults, results);
     updateRawData(results);
     document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
