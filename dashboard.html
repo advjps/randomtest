@@ -1,0 +1,466 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crypto Leverage Trade Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f4; color: #333; margin: 0; padding: 10px; }
+    h1, h2 { text-align: center; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+    th, td { padding: 8px 5px; text-align: center; border-bottom: 1px solid #ddd; }
+    th { background: #007bff; color: white; }
+    td.bold { font-weight: bold; font-size: 15px; }
+    .progress-container { width: 100%; background: #ddd; border-radius: 5px; margin: 10px 0; }
+    .progress-bar { width: 0%; height: 12px; background: #007bff; border-radius: 5px; }
+    .spinner { display: none; margin-left: 10px; border: 3px solid #f3f3f3; border-top: 3px solid #007bff; border-radius: 50%; width: 16px; height: 16px; animation: spin 1s linear infinite; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+    .buy { background-color: #d8f8d8; }
+    .sell { background-color: #f8d8d8; }
+    .top-pick { background-color: #b5e7b5 !important; }
+    .top-pick-sell { background-color: #e7b5b5 !important; }
+    .pop-high { color: green; font-weight: bold; }
+    .pop-medium { color: orange; font-weight: bold; }
+    .pop-low { color: red; font-weight: bold; }
+    .raw-section { margin-top: 20px; background: #fff; padding: 10px; border-radius: 8px; }
+    #raw-data { width: 100%; height: 150px; font-size: 12px; font-family: monospace; display: none; }
+    button { margin: 5px; }
+    @media (max-width: 768px) { table { font-size: 11px; } td.bold { font-size: 13px; } }
+  </style>
+</head>
+<body>
+  <h1>Crypto Leverage Trade Dashboard</h1>
+  <p style="text-align:center;">Last Updated: <span id="last-update">--:--</span></p>
+  <p style="text-align:center;">Next Refresh Suggested In: <span id="countdown">--:--</span></p>
+  <div style="text-align:center;">
+    <button id="refresh-btn">Refresh Data</button>
+    <div class="spinner" id="spinner"></div>
+  </div>
+  <div class="progress-container"><div class="progress-bar" id="progress-bar"></div></div>
+
+
+  <!-- Sections -->
+  <div class="section" id="strong-buy-section">
+    <h2>Strong Buy</h2>
+    <table>
+      <thead>
+        <tr><th>Coin</th><th>Price</th><th>TP</th><th>SL</th><th>Leverage</th><th>POP</th><th>Estimated Profit</th></tr>
+      </thead>
+      <tbody id="strong-buy-body"></tbody>
+    </table>
+    <p id="strong-buy-filter"></p>
+  </div>
+
+
+  <div class="section" id="buy-section">
+    <h2>Buy</h2>
+    <table>
+      <thead>
+        <tr><th>Coin</th><th>Price</th><th>TP</th><th>SL</th><th>Leverage</th><th>POP</th><th>Estimated Profit</th></tr>
+      </thead>
+      <tbody id="buy-body"></tbody>
+    </table>
+    <p id="buy-filter"></p>
+  </div>
+
+
+  <div class="section" id="strong-sell-section">
+    <h2>Strong Sell</h2>
+    <table>
+      <thead>
+        <tr><th>Coin</th><th>Price</th><th>TP</th><th>SL</th><th>Leverage</th><th>POP</th><th>Estimated Profit</th></tr>
+      </thead>
+      <tbody id="strong-sell-body"></tbody>
+    </table>
+    <p id="strong-sell-filter"></p>
+  </div>
+
+
+  <div class="section" id="sell-section">
+    <h2>Sell</h2>
+    <table>
+      <thead>
+        <tr><th>Coin</th><th>Price</th><th>TP</th><th>SL</th><th>Leverage</th><th>POP</th><th>Estimated Profit</th></tr>
+      </thead>
+      <tbody id="sell-body"></tbody>
+    </table>
+    <p id="sell-filter"></p>
+  </div>
+
+
+  <!-- Raw Data -->
+  <div class="raw-section">
+    <button id="toggle-raw-btn">Show Raw Data</button>
+    <button id="copy-btn">Copy Raw Data</button>
+    <button id="download-btn">Download JSON</button>
+    <textarea id="raw-data" readonly></textarea>
+  </div>
+ <script>
+  const coins = [
+    'BTCUSDT','ETHUSDT','DOGEUSDT','SOLUSDT','XRPUSDT','GALAUSDT','CFXUSDT','PEPEUSDT','ENAUSDT','PNUTUSDT',
+    'REZUSDT','SHIBUSDT','ETCUSDT','HBARUSDT','CKBUSDT','ARBUSDT','WLDUSDT','CHILLGUYUSDT','UNIUSDT','MOODENGUSDT',
+    'AVAXUSDT','XLMUSDT','WIFUSDT','AAVEUSDT','EPICUSDT','BLURUSDT','POPCATUSDT','PENGUUSDT','ADAUSDT','SUIUSDT'
+  ];
+  let countdownInterval;
+
+
+  document.getElementById('refresh-btn').addEventListener('click', fetchData);
+  document.getElementById('toggle-raw-btn').addEventListener('click', () => {
+    const rawBox = document.getElementById('raw-data');
+    rawBox.style.display = rawBox.style.display === 'none' ? 'block' : 'none';
+  });
+  document.getElementById('copy-btn').addEventListener('click', () => {
+    document.getElementById('raw-data').select();
+    document.execCommand('copy');
+    alert('Raw data copied!');
+  });
+  document.getElementById('download-btn').addEventListener('click', () => {
+    const blob = new Blob([document.getElementById('raw-data').value], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    const ts = new Date().toISOString().replace(/[:.]/g,'-');
+    link.download = `crypto_signals_${ts}.json`;
+    link.click();
+  });
+
+
+  async function fetchData() {
+    clearInterval(countdownInterval);
+    startSpinner(true);
+    updateProgress(0);
+
+
+    let results = [];
+    for (let i = 0; i < coins.length; i++) {
+      const symbol = coins[i];
+      try {
+        const data = await fetchBinanceDataWithFallback(symbol);
+        const analysis = analyzeData(symbol, data);
+        results.push(analysis);
+      } catch (e) {
+        console.error(`Error fetching ${symbol}:`, e);
+      }
+      updateProgress(((i+1) / coins.length) * 100);
+    }
+
+
+    const filteredResults = results.filter(r => r.pop >= 50);
+    updateDashboard(filteredResults, results);
+    updateRawData(results);
+    document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+    startSpinner(false);
+    startCountdown(300);
+  }
+
+
+  async function fetchBinanceDataWithFallback(symbol) {
+    const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=15m&limit=100`;
+    try { return await fetchBinanceData(url); }
+    catch (err) {
+      const proxyUrl = `https://cors-anywhere.herokuapp.com/${url}`;
+      return await fetchBinanceData(proxyUrl);
+    }
+  }
+
+
+  async function fetchBinanceData(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    return data.map(d => ({ open: +d[1], high: +d[2], low: +d[3], close: +d[4], volume: +d[5] }));
+  }
+
+
+  function analyzeData(symbol, data) {
+    const closes = data.map(d => d.close);
+    const highs = data.map(d => d.high);
+    const lows = data.map(d => d.low);
+    const price = closes.at(-1);
+
+
+    // Indicators
+    const rsi = calcRSI(closes, 14);
+    const macdObj = calcMACD(closes, 12, 26, 9);
+    const ema20 = calcEMA(closes, 20);
+    const ema50 = calcEMA(closes, 50);
+    const boll = calcBollinger(closes, 20, 2);
+    const atr = calcATR(highs, lows, closes, 14);
+    const adx = calcADX(highs, lows, closes, 14);
+    const stochastic = calcStochastic(highs, lows, closes, 14, 3);
+    const cci = calcCCI(highs, lows, closes, 20);
+    const sar = calcSAR(highs, lows, 0.02, 0.2);
+    const vwap = calcVWAP(highs, lows, closes, data.map(d => d.volume));
+
+
+    // POP scoring
+    let score = 0;
+    if (rsi > 50) score += 1.5;
+    if (macdObj.macd > macdObj.signal) score += 1.5;
+    if (ema20 > ema50) score += 1.5;
+    if (price > boll.middle) score += 1.5;
+    if (adx > 20) score += 1.5;
+    if (stochastic.k > stochastic.d) score += 1;
+    if (cci > 100) score += 1;
+    if (price > sar) score += 1;
+    if (price > vwap) score += 0.5;
+
+
+    const pop = Math.min(100, Math.round((score / 10) * 100));
+
+
+    // TP & SL
+    const tp = price + 1.5 * atr;
+    const sl = price - 1 * atr;
+
+
+    // Leverage & Profit
+    const leverage = Math.min(10, Math.max(4, Math.round(4 + (score / 10) * 6)));
+    const profitPct = (((tp - price) / price) * 100 * leverage).toFixed(2);
+
+
+    // Signal
+    const signalType = score >= 7 ? "Strong Buy" :
+                       score >= 5 ? "Buy" :
+                       score <= 3 ? "Strong Sell" :
+                       score <= 4 ? "Sell" : "Neutral";
+
+
+    return {
+      coin: symbol,
+      price,
+      tp: tp.toFixed(4),
+      sl: sl.toFixed(4),
+      leverage: leverage + "x",
+      pop,
+      estimated_profit: profitPct + "%",
+      signal: signalType,
+      indicators: { rsi, macdObj, ema20, ema50, boll, adx, stochastic, cci, sar, vwap, atr }
+    };
+  }
+
+
+  // --- Indicator Functions ---
+  function calcEMA(values, period) {
+    if (values.length < period) return 0;
+    const k = 2 / (period + 1);
+    let ema = values.slice(0, period).reduce((a, b) => a + b) / period;
+    for (let i = period; i < values.length; i++) {
+      ema = values[i] * k + ema * (1 - k);
+    }
+    return ema;
+  }
+
+
+  function calcRSI(values, period) {
+    if (values.length < period + 1) return 0;
+    let gains = 0, losses = 0;
+    for (let i = 1; i <= period; i++) {
+      const diff = values[i] - values[i - 1];
+      if (diff >= 0) gains += diff; else losses -= diff;
+    }
+    let avgGain = gains / period;
+    let avgLoss = losses / period;
+    for (let i = period + 1; i < values.length; i++) {
+      const diff = values[i] - values[i - 1];
+      avgGain = (avgGain * (period - 1) + Math.max(diff, 0)) / period;
+      avgLoss = (avgLoss * (period - 1) + Math.max(-diff, 0)) / period;
+    }
+    if (avgLoss === 0) return 100;
+    const rs = avgGain / avgLoss;
+    return 100 - (100 / (1 + rs));
+  }
+
+
+  function calcMACD(values, fast = 12, slow = 26, signal = 9) {
+    if (values.length < slow) return { macd: 0, signal: 0 };
+    const emaFast = calcEMA(values, fast);
+    const emaSlow = calcEMA(values, slow);
+    const macd = emaFast - emaSlow;
+    const signalLine = (macd + emaSlow) / 2;
+    return { macd, signal: signalLine };
+  }
+
+
+  function calcBollinger(values, period, mult) {
+    if (values.length < period) return { upper: 0, middle: 0, lower: 0 };
+    const slice = values.slice(-period);
+    const mean = slice.reduce((a, b) => a + b) / period;
+    const variance = slice.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / period;
+    const stddev = Math.sqrt(variance);
+    return { upper: mean + mult * stddev, middle: mean, lower: mean - mult * stddev };
+  }
+
+
+  function calcATR(highs, lows, closes, period) {
+    if (highs.length < period + 1) return 0;
+    let trs = [];
+    for (let i = 1; i < highs.length; i++) {
+      const tr = Math.max(
+        highs[i] - lows[i],
+        Math.abs(highs[i] - closes[i - 1]),
+        Math.abs(lows[i] - closes[i - 1])
+      );
+      trs.push(tr);
+    }
+    return trs.slice(-period).reduce((a, b) => a + b, 0) / period;
+  }
+
+
+  function calcADX(highs, lows, closes, period) {
+    if (highs.length < period + 1) return 0;
+    let plusDM = 0, minusDM = 0, tr = 0;
+    for (let i = 1; i < highs.length; i++) {
+      const upMove = highs[i] - highs[i - 1];
+      const downMove = lows[i - 1] - lows[i];
+      plusDM += (upMove > downMove && upMove > 0) ? upMove : 0;
+      minusDM += (downMove > upMove && downMove > 0) ? downMove : 0;
+      tr += Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1]));
+    }
+    const plusDI = (plusDM / tr) * 100;
+    const minusDI = (minusDM / tr) * 100;
+    const dx = Math.abs(plusDI - minusDI) / (plusDI + minusDI) * 100;
+    return dx;
+  }
+
+
+  function calcStochastic(highs, lows, closes, kPeriod, dPeriod) {
+    const sliceHigh = highs.slice(-kPeriod);
+    const sliceLow = lows.slice(-kPeriod);
+    const highest = Math.max(...sliceHigh);
+    const lowest = Math.min(...sliceLow);
+    const k = ((closes.at(-1) - lowest) / (highest - lowest)) * 100;
+    const d = k;
+    return { k, d };
+  }
+
+
+  function calcCCI(highs, lows, closes, period) {
+    if (highs.length < period) return 0;
+    const typical = highs.map((h, i) => (h + lows[i] + closes[i]) / 3);
+    const tpSlice = typical.slice(-period);
+    const mean = tpSlice.reduce((a, b) => a + b) / period;
+    const meanDev = tpSlice.reduce((a, b) => a + Math.abs(b - mean), 0) / period;
+    return (typical.at(-1) - mean) / (0.015 * meanDev);
+  }
+function calcSAR(highs, lows, step, maxStep) {
+    if (highs.length < 2) return 0;
+    let sar = lows[0];
+    let ep = highs[0];
+    let af = step;
+    let uptrend = true;
+    for (let i = 1; i < highs.length; i++) {
+      sar = sar + af * (ep - sar);
+      if (uptrend) {
+        if (highs[i] > ep) {
+          ep = highs[i];
+          af = Math.min(af + step, maxStep);
+        }
+        if (lows[i] < sar) {
+          uptrend = false;
+          sar = ep;
+          ep = lows[i];
+          af = step;
+        }
+      } else {
+        if (lows[i] < ep) {
+          ep = lows[i];
+          af = Math.min(af + step, maxStep);
+        }
+        if (highs[i] > sar) {
+          uptrend = true;
+          sar = ep;
+          ep = highs[i];
+          af = step;
+        }
+      }
+    }
+    return sar;
+  }
+
+
+  function calcVWAP(highs, lows, closes, volumes) {
+    let cumPV = 0, cumVol = 0;
+    for (let i = 0; i < closes.length; i++) {
+      const typicalPrice = (highs[i] + lows[i] + closes[i]) / 3;
+      cumPV += typicalPrice * volumes[i];
+      cumVol += volumes[i];
+    }
+    return cumPV / cumVol;
+  }
+
+
+  function updateDashboard(filteredResults, allResults) {
+    const sections = {
+      "Strong Buy": document.getElementById('strong-buy-body'),
+      "Buy": document.getElementById('buy-body'),
+      "Strong Sell": document.getElementById('strong-sell-body'),
+      "Sell": document.getElementById('sell-body')
+    };
+    Object.values(sections).forEach(body => body.innerHTML = '');
+
+
+    const sorted = { "Strong Buy": [], "Buy": [], "Strong Sell": [], "Sell": [] };
+    filteredResults.forEach(r => {
+      if (sorted[r.signal]) sorted[r.signal].push(r);
+    });
+
+
+    for (let key in sorted) {
+      sorted[key].sort((a, b) => parseFloat(b.estimated_profit) - parseFloat(a.estimated_profit));
+      sorted[key].forEach((r, index) => {
+        const popClass = r.pop >= 70 ? 'pop-high' : (r.pop >= 50 ? 'pop-medium' : 'pop-low');
+        const topClass = index < 3 ? (key.includes("Sell") ? "top-pick-sell" : "top-pick") : "";
+        const row = `<tr class="${topClass}">
+          <td>${r.coin.replace('USDT','')}</td>
+          <td>$${r.price.toFixed(4)}</td>
+          <td>${r.tp}</td>
+          <td>${r.sl}</td>
+          <td>${r.leverage}</td>
+          <td class="${popClass}">${r.pop}%</td>
+          <td class="bold">${r.estimated_profit}</td>
+        </tr>`;
+        sections[key].innerHTML += row;
+      });
+    }
+  }
+
+
+  function updateRawData(results) {
+    document.getElementById('raw-data').value = JSON.stringify(results, null, 2);
+  }
+
+
+  function startSpinner(show) {
+    document.getElementById('spinner').style.display = show ? 'inline-block' : 'none';
+    document.getElementById('refresh-btn').disabled = show;
+  }
+
+
+  function updateProgress(percent) {
+    document.getElementById('progress-bar').style.width = percent + "%";
+  }
+
+
+  function startCountdown(seconds) {
+    const countdownEl = document.getElementById('countdown');
+    let remaining = seconds;
+    countdownEl.textContent = formatTime(remaining);
+    countdownInterval = setInterval(() => {
+      remaining--;
+      countdownEl.textContent = formatTime(remaining);
+      if (remaining <= 0) clearInterval(countdownInterval);
+    }, 1000);
+  }
+
+
+  function formatTime(sec) {
+    const m = String(Math.floor(sec / 60)).padStart(2, '0');
+    const s = String(sec % 60).padStart(2, '0');
+    return `${m}:${s}`;
+  }
+
+
+  fetchData();
+</script>
+</body>
+</html>
