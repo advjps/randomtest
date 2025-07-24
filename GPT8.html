@@ -1,0 +1,425 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Crypto Leverage Trade Dashboard</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      background-color: #1e293b;
+      padding: 1rem;
+      text-align: center;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      color: #38bdf8;
+    }
+    .section {
+      margin: 1rem;
+    }
+    .section h2 {
+      color: #facc15;
+      font-size: 1.25rem;
+      margin-bottom: 0.5rem;
+    }
+    .coin-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .coin-card {
+      background-color: #1e293b;
+      border-left: 6px solid transparent;
+      padding: 0.75rem;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      font-size: 0.95rem;
+    }
+    .coin-card.strong-buy { border-color: #22c55e; background-color: #14532d; }
+    .coin-card.buy { border-color: #4ade80; }
+    .coin-card.strong-sell { border-color: #ef4444; background-color: #7f1d1d; }
+    .coin-card.sell { border-color: #f87171; }
+.coin-card .name {
+      font-weight: bold;
+      font-size: 1.1rem;
+      margin-bottom: 0.25rem;
+    }
+    .coin-card .price {
+      color: #e2e8f0;
+    }
+    .coin-card .info-row {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 0.25rem;
+    }
+    .coin-card .info-label {
+      font-weight: bold;
+    }
+    .coin-card .info-value {
+      margin-left: 0.5rem;
+    }
+    .coin-card .profit {
+      font-size: 1rem;
+      font-weight: bold;
+    }
+    .green { color: #4ade80; }
+    .orange { color: #fbbf24; }
+    .red { color: #f87171; }
+    .btn {
+      margin: 0.5rem;
+      padding: 0.5rem 1rem;
+      border: none;
+      border-radius: 6px;
+      background-color: #2563eb;
+      color: white;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    .btn:hover {
+      background-color: #1d4ed8;
+    }
+    .loader {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #2563eb;
+      border-radius: 50%;
+      width: 28px;
+      height: 28px;
+      animation: spin 1s linear infinite;
+      margin: auto;
+      display: none;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Crypto Leverage Trade Dashboard</h1>
+    <button class="btn" onclick="refreshData()">🔄 Refresh</button>
+    <button class="btn" onclick="downloadJSON()">⬇ Download JSON</button>
+  </header>
+
+
+  <div class="loader" id="loader"></div>
+  <div class="section" id="timestamp"></div>
+
+
+  <div class="section" id="strongBuySection">
+    <h2>Strong Buy</h2>
+    <div class="coin-list" id="strongBuyList"></div>
+  </div>
+
+
+  <div class="section" id="strongSellSection">
+    <h2>Strong Sell</h2>
+    <div class="coin-list" id="strongSellList"></div>
+  </div>
+
+
+  <div class="section" id="buySection">
+    <h2>Buy</h2>
+    <div class="coin-list" id="buyList"></div>
+  </div>
+
+
+  <div class="section" id="sellSection">
+    <h2>Sell</h2>
+    <div class="coin-list" id="sellList"></div>
+  </div>
+
+
+<script>
+    const coins = [
+      "BTCUSDT", "ETHUSDT", "DOGEUSDT", "SOLUSDT", "XRPUSDT", "GALAUSDT", "CFXUSDT",
+      "1000PEPEUSDT", "ENAUSDT", "PNUTUSDT", "REZUSDT", "1000SHIBUSDT", "ETCUSDT",
+      "HBARUSDT", "CKBUSDT", "ARBUSDT", "WLDUSDT", "CHILLGUYUSDT", "UNIUSDT", "MOODENGUSDT",
+      "AVAXUSDT", "XLMUSDT", "WIFUSDT", "AAVEUSDT", "EPICUSDT", "BLURUSDT", "POPCATUSDT",
+      "PENGUUSDT", "ADAUSDT", "SUIUSDT"
+    ];
+
+
+    function calculateEMA(prices, period) {
+      const k = 2 / (period + 1);
+      let emaArray = [prices[0]];
+      for (let i = 1; i < prices.length; i++) {
+        emaArray.push(prices[i] * k + emaArray[i - 1] * (1 - k));
+      }
+      return emaArray;
+    }
+
+
+    function calculateRSI(prices, period = 14) {
+      let gains = 0, losses = 0;
+      for (let i = 1; i <= period; i++) {
+        let change = prices[i] - prices[i - 1];
+        if (change > 0) gains += change;
+        else losses -= change;
+      }
+      gains /= period;
+      losses /= period;
+      let rs = gains / (losses || 1e-9);
+      return 100 - 100 / (1 + rs);
+    }
+
+
+    function calculateMACD(prices) {
+      const ema12 = calculateEMA(prices, 12);
+      const ema26 = calculateEMA(prices, 26);
+      let macdLine = ema12.map((val, i) => val - ema26[i]);
+      let signalLine = calculateEMA(macdLine.slice(ema26.length - macdLine.length), 9);
+      return {
+        macd: macdLine[macdLine.length - 1],
+        signal: signalLine[signalLine.length - 1]
+      };
+    }
+
+
+    function calculateATR(highs, lows, closes, period = 14) {
+      let trs = [];
+      for (let i = 1; i < highs.length; i++) {
+        let tr = Math.max(
+          highs[i] - lows[i],
+          Math.abs(highs[i] - closes[i - 1]),
+          Math.abs(lows[i] - closes[i - 1])
+        );
+        trs.push(tr);
+      }
+      return trs.slice(-period).reduce((a, b) => a + b, 0) / period;
+    }
+
+
+    function getColorByProfit(percentage) {
+      if (percentage >= 10) return 'green';
+      if (percentage >= 5) return 'orange';
+      return 'red';
+    }
+
+
+async function analyzeCoin(coin) {
+      try {
+        const url = `https://api.binance.com/api/v3/klines?symbol=${coin}&interval=1h&limit=100`;
+        const res = await fetch(url);
+        const data = await res.json();
+        const closes = data.map(c => parseFloat(c[4]));
+        const highs = data.map(c => parseFloat(c[2]));
+        const lows = data.map(c => parseFloat(c[3]));
+        const volumes = data.map(c => parseFloat(c[5]));
+        const current = closes[closes.length - 1];
+
+
+        // Indicators
+        const rsi = calculateRSI(closes);
+        const macdObj = calculateMACD(closes);
+        const ema20 = calculateEMA(closes, 20).at(-1);
+        const ema50 = calculateEMA(closes, 50).at(-1);
+        const atr = calculateATR(highs, lows, closes);
+        const adx = 20 + Math.random() * 30; // Placeholder ADX
+        const sar = lows.at(-2); // Placeholder SAR
+        const vwap = (closes.reduce((a, b) => a + b) / closes.length).toFixed(2); // Simple VWAP
+        const cci = (Math.random() * 200 - 100).toFixed(2); // Placeholder CCI
+        const stochastic = (Math.random() * 100).toFixed(2); // Placeholder Stoch
+        const bbMid = ema20;
+
+
+        // Scoring (basic)
+        let score = 0;
+        if (rsi > 60) score += 1;
+        if (current > ema20) score += 1;
+        if (current > ema50) score += 1;
+        if (macdObj.macd > macdObj.signal) score += 1;
+        if (current > sar) score += 1;
+        if (current > bbMid) score += 1;
+        if (adx > 25) score += 1;
+        if (rsi < 40) score -= 1;
+        if (current < ema20) score -= 1;
+        if (macdObj.macd < macdObj.signal) score -= 1;
+
+
+        // POP (new)
+        let pop =
+          0.4 * ((rsi - 50) / 50) * 100 +
+          0.3 * ((current - ema20) / ema20) * 100 +
+          0.2 * (adx > 25 ? (adx - 25) / 25 * 100 : 0) +
+          0.1 * (1 - atr / current) * 100;
+        pop = Math.min(Math.max(Math.round(pop), 20), 80);
+
+
+        let signal = "Neutral";
+        if (score >= 7) signal = "Strong Buy";
+        else if (score >= 5) signal = "Buy";
+        else if (score <= -7) signal = "Strong Sell";
+        else if (score <= -5) signal = "Sell";
+
+
+        // TP/SL
+        const tp = signal.includes("Sell")
+          ? (current - atr * 2).toFixed(4)
+          : (current + atr * 2).toFixed(4);
+        const sl = signal.includes("Sell")
+          ? (current + atr).toFixed(4)
+          : (current - atr).toFixed(4);
+
+
+        const estProfit = Math.abs(((tp - current) / current) * 100).toFixed(2);
+        const color = getColorByProfit(estProfit);
+
+
+        return {
+          coin,
+          signal,
+          price: current.toFixed(4),
+          pop,
+          rsi: rsi.toFixed(2),
+          macd: macdObj.macd.toFixed(4),
+          ema20: ema20.toFixed(4),
+          ema50: ema50.toFixed(4),
+          adx: adx.toFixed(2),
+          atr: atr.toFixed(4),
+          sar,
+          vwap,
+          cci,
+          stochastic,
+          bbMid,
+          tp,
+          sl,
+          leverage: Math.min(Math.max(Math.floor(estProfit / 1.5), 4), 10),
+          estProfit,
+          color
+        };
+      } catch (e) {
+        return null;
+      }
+    }
+
+
+    function renderResults(results) {
+      const sections = {
+        "Strong Buy": document.getElementById("strong-buy"),
+        "Buy": document.getElementById("buy"),
+        "Sell": document.getElementById("sell"),
+        "Strong Sell": document.getElementById("strong-sell")
+      };
+      Object.keys(sections).forEach(k => (sections[k].innerHTML = ""));
+
+
+      results
+        .filter(r => r && r.signal !== "Neutral")
+        .sort((a, b) => b.estProfit - a.estProfit)
+        .forEach(r => {
+          const row = document.createElement("div");
+          row.innerHTML = `
+            <strong>${r.coin}</strong> @ $${r.price}
+            | TP: ${r.tp}, SL: ${r.sl}, Leverage: ${r.leverage}x
+            | POP: ${r.pop}%, 
+            <span style="color:${r.color}"><b>${r.estProfit}%</b></span>
+          `;
+          row.style.padding = "5px";
+          row.style.marginBottom = "4px";
+          row.style.background = r.signal.includes("Sell")
+            ? "#ffe6e6"
+            : "#e6ffe6";
+          sections[r.signal].appendChild(row);
+        });
+    }
+
+
+function getColorByProfit(p) {
+      if (p > 6) return "green";
+      if (p > 3) return "orange";
+      return "red";
+    }
+
+
+    function showRawData(data) {
+      const rawData = data
+        .filter(r => r && r.signal !== "Neutral")
+        .map(r => ({
+          coin: r.coin,
+          price: r.price,
+          signal: r.signal,
+          leverage: r.leverage,
+          tp: r.tp,
+          sl: r.sl,
+          pop: r.pop,
+          estimated_profit: r.estProfit + "%",
+          rsi: r.rsi,
+          macd: r.macd,
+          ema20: r.ema20,
+          ema50: r.ema50,
+          adx: r.adx,
+          atr: r.atr,
+          vwap: r.vwap,
+          sar: r.sar,
+          cci: r.cci,
+          stochastic: r.stochastic
+        });
+
+
+      const json = JSON.stringify(rawData, null, 2);
+      document.getElementById("raw-data-box").value = json;
+    }
+
+
+    function downloadJSON(data) {
+      const json = JSON.stringify(
+        data.filter(r => r && r.signal !== "Neutral"),
+        null,
+        2
+      );
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const now = new Date();
+      now.setMinutes(now.getMinutes() + 330); // Adjust to IST
+      const fileName = `crypto_signals_${now.toISOString().replace(/[:.]/g, "-")}.json`;
+
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      a.click();
+    }
+
+
+    document.getElementById("refreshBtn").addEventListener("click", async () => {
+      document.getElementById("progress-bar").style.width = "0%";
+      const data = [];
+      for (let i = 0; i < coins.length; i++) {
+        const result = await analyzeCoin(coins[i]);
+        data.push(result);
+        document.getElementById("progress-bar").style.width = `${
+          ((i + 1) / coins.length) * 100
+        }%`;
+      }
+      renderResults(data);
+      showRawData(data);
+      window.latestData = data;
+    });
+
+
+    document.getElementById("downloadBtn").addEventListener("click", () => {
+      if (window.latestData) {
+        downloadJSON(window.latestData);
+      }
+    });
+
+
+    document.getElementById("copyBtn").addEventListener("click", () => {
+      const box = document.getElementById("raw-data-box");
+      box.select();
+      document.execCommand("copy");
+      alert("Raw JSON copied to clipboard!");
+    });
+  </script>
+</body>
+</html>
