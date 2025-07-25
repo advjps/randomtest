@@ -209,8 +209,14 @@
 
 
     // TP & SL
-    const tp = price + 1.5 * atr;
-    const sl = price - 1 * atr;
+    let tp, sl;
+if (signalType === "Strong Sell" || signalType === "Sell") {
+  tp = price - 1.5 * atr;
+  sl = price + 1 * atr;
+} else {
+  tp = price + 1.5 * atr;
+  sl = price - 1 * atr;
+}
 
 
     // Leverage & Profit
