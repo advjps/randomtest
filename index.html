@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BTCUSDT Test</title>
+  <style>
+    body {
+      background-color: #111;
+      color: #00ff99;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    button {
+      padding: 10px 20px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    #output {
+      margin-top: 20px;
+      white-space: pre-line;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+  <h1>BTCUSDT Price Fetch Test</h1>
+  <button onclick="fetchBTC()">Fetch BTC Price</button>
+  <div id="output">Press the button above to get BTC price data.</div>
+
+  <script>
+    async function fetchBTC() {
+      const output = document.getElementById('output');
+      output.textContent = "Fetching BTC data...";
+
+      const corsProxy = 'https://corsproxy.io/?key=242f35c2&url=';
+      const binanceAPI = 'https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT';
+      const url = corsProxy + encodeURIComponent(binanceAPI);
+
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("HTTP error " + response.status);
+        const data = await response.json();
+
+        output.textContent = `
+Symbol: ${data.symbol}
+Last Price: ${data.lastPrice}
+Price Change: ${data.priceChangePercent}%
+Volume: ${data.volume}
+High: ${data.highPrice}
+Low: ${data.lowPrice}
+        `.trim();
+      } catch (err) {
+        output.textContent = "Error fetching data:\n" + err.message;
+      }
+    }
+  </script>
+</body>
+</html>
