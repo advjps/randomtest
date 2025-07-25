@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>BTCUSDT Price Fetch Debug</title>
+  <style>
+    body {
+      background-color: #000;
+      color: #0f0;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding-top: 100px;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 18px;
+      cursor: pointer;
+      border-radius: 6px;
+    }
+    #output {
+      margin-top: 20px;
+      font-size: 18px;
+      white-space: pre-wrap;
+      text-align: left;
+      max-width: 90%;
+      margin-left: auto;
+      margin-right: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>BTCUSDT Price Fetch Debug</h1>
+  <button onclick="fetchPrice()">Fetch BTC Price</button>
+  <div id="output">Click the button to fetch data...</div>
+
+  <script>
+    async function fetchPrice() {
+      const proxyUrl = 'https://api.allorigins.win/get?url=';
+      const targetUrl = 'https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT';
+      const fullUrl = proxyUrl + encodeURIComponent(targetUrl);
+
+      const outputDiv = document.getElementById('output');
+      outputDiv.innerText = "Fetching...";
+
+      try {
+        const response = await fetch(fullUrl);
+        if (!response.ok) {
+          throw new Error("HTTP error " + response.status);
+        }
+
+        const result = await response.json();
+        outputDiv.innerText = "Raw result:\n" + JSON.stringify(result, null, 2);
+
+        const contents = result.contents;
+        const parsed = JSON.parse(contents);
+        const price = parsed.price;
+
+        outputDiv.innerText += `\n\nParsed Binance response:\n${JSON.stringify(parsed, null, 2)}`;
+        outputDiv.innerText += `\n\n✅ BTC Price: $${price}`;
+      } catch (error) {
+        outputDiv.innerText = `❌ Error: ${error.message}`;
+      }
+    }
+  </script>
+</body>
+</html>
