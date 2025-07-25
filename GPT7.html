@@ -210,12 +210,15 @@
 
     // TP & SL
     let tp, sl;
-if (signalType === "Strong Sell" || signalType === "Sell") {
+if (signalType === "Buy" || signalType === "Strong Buy") {
+  tp = price + 1.5 * atr;
+  sl = price - 1 * atr;
+} else if (signalType === "Sell" || signalType === "Strong Sell") {
   tp = price - 1.5 * atr;
   sl = price + 1 * atr;
 } else {
-  tp = price + 1.5 * atr;
-  sl = price - 1 * atr;
+  tp = price;
+  sl = price;
 }
 
 
