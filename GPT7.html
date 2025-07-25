@@ -272,12 +272,18 @@
 
 
   function calcMACD(values, fast = 12, slow = 26, signal = 9) {
-    if (values.length < slow) return { macd: 0, signal: 0 };
-    const emaFast = calcEMA(values, fast);
-    const emaSlow = calcEMA(values, slow);
-    const macd = emaFast - emaSlow;
-    const signalLine = (macd + emaSlow) / 2;
-    return { macd, signal: signalLine };
+  if (values.length < slow + signal) return { macd: 0, signal: 0 };
+  const macdLine = [];
+  for (let i = slow; i < values.length; i++) {
+    const emaFast = calcEMA(values.slice(i - fast, i + 1), fast);
+    const emaSlow = calcEMA(values.slice(i - slow, i + 1), slow);
+    macdLine.push(emaFast - emaSlow);
+  }
+  const signalLine = calcEMA(macdLine, signal);
+  return {
+    macd: macdLine.at(-1),
+    signal: signalLine
+  };
   }
 
 
