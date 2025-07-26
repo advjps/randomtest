@@ -194,15 +194,15 @@
 
     // POP scoring
     let score = 0;
-    if (rsi > 50) score += 1.5;
+    if (rsi > 55) score += 1.5;
     if (macdObj.macd > macdObj.signal) score += 1.5;
     if (ema20 > ema50) score += 1.5;
     if (price > boll.middle) score += 1.5;
-    if (adx > 20) score += 1.5;
+    if (adx > 25) score += 1.5;
     if (stochastic.k > stochastic.d) score += 1;
-    if (cci > 100) score += 1;
+    if (cci > 100) score += 0.5;
     if (price > sar) score += 1;
-    if (price > vwap) score += 0.5;
+    if (price > vwap) score += 1;
 
 
     const pop = Math.min(100, Math.round((score / 10) * 100));
