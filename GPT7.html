@@ -207,7 +207,14 @@
 
     const pop = Math.min(100, Math.round((score / 10) * 100));
 
+    
+// Signal
+    const signalType = score >= 7 ? "Strong Buy" :
+                       score >= 5 ? "Buy" :
+                       score <= 3 ? "Strong Sell" :
+                       score <= 4 ? "Sell" : "Neutral";
 
+    
     // TP & SL
     const tp = price + 1.5 * atr;
 const sl = price - 1 * atr;
@@ -216,13 +223,6 @@ const sl = price - 1 * atr;
     // Leverage & Profit
     const leverage = Math.min(10, Math.max(4, Math.round(4 + (score / 10) * 6)));
     const profitPct = (((tp - price) / price) * 100 * leverage).toFixed(2);
-
-
-    // Signal
-    const signalType = score >= 7 ? "Strong Buy" :
-                       score >= 5 ? "Buy" :
-                       score <= 3 ? "Strong Sell" :
-                       score <= 4 ? "Sell" : "Neutral";
 
 
     return {
