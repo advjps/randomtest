@@ -320,19 +320,33 @@ function calcEMAArray(values, period) {
   }
 
 
-  function calcATR(highs, lows, closes, period) {
-    if (highs.length < period + 1) return 0;
-    let trs = [];
-    for (let i = 1; i < highs.length; i++) {
-      const tr = Math.max(
-        highs[i] - lows[i],
-        Math.abs(highs[i] - closes[i - 1]),
-        Math.abs(lows[i] - closes[i - 1])
-      );
-      trs.push(tr);
-    }
-    return trs.slice(-period).reduce((a, b) => a + b, 0) / period;
+  function calcATR(highs, lows, closes, period = 14) {
+  if (
+    highs.length < period ||
+    lows.length < period ||
+    closes.length < period ||
+    highs.length !== lows.length ||
+    highs.length !== closes.length ||
+    period <= 0
+  ) {
+    return 0;
   }
+  const trs = [];
+  for (let i = 1; i < highs.length; i++) {
+    if (!Number.isFinite(highs[i]) || !Number.isFinite(lows[i]) || !Number.isFinite(closes[i - 1])) {
+      continue;
+    }
+    const tr = Math.max(
+      highs[i] - lows[i],
+      Math.abs(highs[i] - closes[i - 1]),
+      Math.abs(lows[i] - closes[i - 1])
+    );
+    trs.push(tr);
+  }
+  if (trs.length < period) return 0;
+  const atrArray = calcEMAArray(trs, period);
+  return atrArray[atrArray.length - 1] || 0;
+}
 
 
   function calcADX(highs, lows, closes, period) {
