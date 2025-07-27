@@ -298,20 +298,17 @@ function calcEMAArray(values, period) {
   }
 
 
-  function calcMACD(values, fast = 12, slow = 26, signalPeriod = 9) {
-  if (values.length < slow + signalPeriod) return { macd: 0, signal: 0 };
-
+  function calcMACD(values, fast = 12, slow = 26, signal = 9) {
+  if (values.length < slow + signal) return { macd: 0, signal: 0 };
   const emaFastArray = calcEMAArray(values, fast);
   const emaSlowArray = calcEMAArray(values, slow);
-
   const macdLine = emaFastArray.map((val, idx) => val - emaSlowArray[idx]);
-  const signalLineArray = calcEMAArray(macdLine.slice(-signalPeriod * 2), signalPeriod); // last N MACDs
-
+  const signalLineArray = calcEMAArray(macdLine.slice(-signal * 2), signal);
   return {
     macd: macdLine.at(-1),
     signal: signalLineArray.at(-1)
   };
-  }
+}
 
 
   function calcBollinger(values, period, mult) {
