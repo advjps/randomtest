@@ -191,7 +191,9 @@ link.download = `crypto_signals_${tsIST}_IST.json`;
     const cci = calcCCI(highs, lows, closes, 20);
     const sar = calcSAR(highs, lows, 0.02, 0.2);
     const vwap = calcVWAP(highs, lows, closes, data.map(d => d.volume));
-
+const volumes = data.map(d => d.volume);
+const obv = calcOBV(closes, volumes);
+    
 
     // POP scoring
     let score = 0;
@@ -204,7 +206,8 @@ link.download = `crypto_signals_${tsIST}_IST.json`;
     if (cci > 100) score += 0.5;
     if (price > sar) score += 1;
     if (price > vwap) score += 1;
-
+if (obv > 0) score += 1;  // Rising OBV adds to confidence
+    
 
     const pop = Math.min(100, Math.round((score / 10) * 100));
 
@@ -433,6 +436,20 @@ function calcSAR(highs, lows, step, maxStep) {
   }
 
 
+   function calcOBV(closes, volumes) {
+  let obv = 0;
+  for (let i = 1; i < closes.length; i++) {
+    if (closes[i] > closes[i - 1]) {
+      obv += volumes[i];
+    } else if (closes[i] < closes[i - 1]) {
+      obv -= volumes[i];
+    }
+    // if same price, OBV unchanged
+  }
+  return obv;
+   }
+
+   
   function updateDashboard(filteredResults, allResults) {
     const sections = {
       "Strong Buy": document.getElementById('strong-buy-body'),
