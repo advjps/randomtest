@@ -118,8 +118,9 @@
     const blob = new Blob([document.getElementById('raw-data').value], { type: 'application/json' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    const ts = new Date().toISOString().replace(/[:.]/g,'-');
-    link.download = `crypto_signals_${ts}.json`;
+    const nowIST = new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000)); // IST Offset
+const tsIST = nowIST.toISOString().replace(/[:.]/g,'-').replace('T', '_').split('.')[0];
+link.download = `crypto_signals_${tsIST}_IST.json`;
     link.click();
   });
 
