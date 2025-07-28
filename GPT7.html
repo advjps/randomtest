@@ -262,18 +262,14 @@ if (signalType === "Strong Sell" || signalType === "Sell") {
    
 function calcEMAArray(values, period) {
   if (values.length < period) return [];
-
   const k = 2 / (period + 1);
   let emaArray = [];
   let ema = values.slice(0, period).reduce((a, b) => a + b) / period;
-
   emaArray.push(ema);
-
   for (let i = period; i < values.length; i++) {
     ema = values[i] * k + ema * (1 - k);
     emaArray.push(ema);
   }
-
   return emaArray;
 }
 
@@ -299,14 +295,22 @@ function calcEMAArray(values, period) {
 
 
   function calcMACD(values, fast = 12, slow = 26, signal = 9) {
-  if (values.length < slow + signal) return { macd: 0, signal: 0 };
+  if (!values || values.length < slow + signal || !values.every(v => Number.isFinite(v))) {
+    return { macd: 0, signal: 0 }; // Match first calcMACD's fallback
+  }
   const emaFastArray = calcEMAArray(values, fast);
   const emaSlowArray = calcEMAArray(values, slow);
+  if (emaFastArray.length === 0 || emaSlowArray.length === 0) {
+    return { macd: 0, signal: 0 };
+  }
   const macdLine = emaFastArray.map((val, idx) => val - emaSlowArray[idx]);
   const signalLineArray = calcEMAArray(macdLine.slice(-signal * 2), signal);
+  if (signalLineArray.length === 0) {
+    return { macd: 0, signal: 0 };
+  }
   return {
-    macd: macdLine.at(-1),
-    signal: signalLineArray.at(-1)
+    macd: macdLine.at(-1) ?? 0, // Fallback to 0 if undefined
+    signal: signalLineArray.at(-1) ?? 0
   };
 }
 
