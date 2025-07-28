@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -38,7 +38,6 @@
   </div>
   <div class="progress-container"><div class="progress-bar" id="progress-bar"></div></div>
 
-
   <!-- Sections -->
   <div class="section" id="strong-buy-section">
     <h2>Strong Buy</h2>
@@ -51,7 +50,6 @@
     <p id="strong-buy-filter"></p>
   </div>
 
-
   <div class="section" id="strong-sell-section">
     <h2>Strong Sell</h2>
     <table>
@@ -62,7 +60,6 @@
     </table>
     <p id="strong-sell-filter"></p>
   </div>
-
 
   <!-- Raw Data -->
   <div class="raw-section">
@@ -78,7 +75,6 @@
     'WIFUSDT','AAVEUSDT'
   ];
   let countdownInterval;
-
 
   document.getElementById('refresh-btn').addEventListener('click', fetchData);
   document.getElementById('toggle-raw-btn').addEventListener('click', () => {
@@ -100,12 +96,10 @@
     link.click();
   });
 
-
   async function fetchData() {
     clearInterval(countdownInterval);
     startSpinner(true);
     updateProgress(0);
-
 
     let results = [];
     for (let i = 0; i < coins.length; i++) {
@@ -121,7 +115,6 @@
       updateProgress(((i+1) / coins.length) * 100);
     }
 
-
     const filteredResults = results.filter(r => r.signal === "Strong Buy" || r.signal === "Strong Sell");
     updateDashboard(filteredResults, results);
     updateRawData(results);
@@ -129,7 +122,6 @@
     startSpinner(false);
     startCountdown(300);
   }
-
 
   async function fetchBinanceDataWithFallback(symbol, timeframe) {
     const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${timeframe}&limit=100`;
@@ -140,14 +132,12 @@
     }
   }
 
-
   async function fetchBinanceData(url) {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     return data.map(d => ({ open: +d[1], high: +d[2], low: +d[3], close: +d[4], volume: +d[5] }));
   }
-
 
   function analyzeData(symbol, data5m, data1m) {
     const closes5m = data5m.map(d => d.close);
@@ -156,7 +146,6 @@
     const volumes5m = data5m.map(d => d.volume);
     const closes1m = data1m.map(d => d.close);
     const price = closes5m.at(-1);
-
 
     // Data validation
     console.log(`Data for ${symbol} (5m): Closes=${closes5m.slice(-5).map(v => v.toFixed(4))}, Length=${closes5m.length}`);
@@ -171,7 +160,7 @@
       return {
         coin: symbol,
         price: price || 0,
-        tp: "0.0000",
+       _tp: "0.0000",
         sl: "0.0000",
         leverage: "5x",
         pop: 0,
@@ -182,10 +171,13 @@
       };
     }
 
+    // Scale prices for low-valued coins
+    const scaleFactor = price < 0.01 ? 1e6 : 1;
+    const scaledCloses5m = cleanCloses5m.map(v => v * scaleFactor);
 
     // Indicators (5-minute data)
     const rsi = calcRSI(cleanCloses5m, 9);
-    const macdObj = calcMACD(cleanCloses5m, 6, 13, 5);
+    const macdObj = calcMACD(scaledCloses5m, 6, 13, 5);
     const ema20 = calcEMA(cleanCloses5m, 20);
     const ema50 = calcEMA(cleanCloses5m, 50);
     const boll = calcBollinger(cleanCloses5m, 20, 2);
@@ -199,19 +191,16 @@
     const ichimoku = calcIchimoku(cleanCloses5m, cleanHighs5m, cleanLows5m, 9, 26);
     const volOsc = calcVolumeOscillator(cleanVolumes5m, 5, 20);
 
-
     // 1-minute entry confirmation
     const ema9_1m = calcEMA(cleanCloses1m, 9);
     const isBullishEntry = price > ema9_1m && Number.isFinite(ema9_1m);
     const isBearishEntry = price < ema9_1m && Number.isFinite(ema9_1m);
-
 
     // Support/Resistance (5-minute data, last 10 candles)
     const support = Math.min(...cleanLows5m.slice(-10));
     const resistance = Math.max(...cleanHighs5m.slice(-10));
     const isValidSupport = obv > 0;
     const isValidResistance = obv < 0;
-
 
     // POP scoring
     let score = 0;
@@ -251,13 +240,11 @@
     }
     const pop = Math.min(100, Math.round((Math.abs(score) / 11.5) * 100));
 
-
     // Signal
     const signalType = score >= 8 ? "Strong Buy" :
                        score >= 5 ? "Buy" :
                        score <= -8 ? "Strong Sell" :
                        score <= -5 ? "Sell" : "Neutral";
-
 
     // TP & SL
     let tp, sl;
@@ -269,15 +256,18 @@
       sl = isValidSupport ? support : price * 0.99;
     }
 
-
     // Leverage & Profit
     const leverage = Math.min(10, Math.max(5, 5 + Math.floor(pop / 20) * (atr < price * 0.01 ? 1 : 0.5)));
     const profitPct = (((tp - price) / price) * 100 * leverage).toFixed(2);
 
+    // Format MACD for JSON
+    const formattedMacdObj = {
+      macd: Number(macdObj.macd / scaleFactor).toFixed(6),
+      signal: Number(macdObj.signal / scaleFactor).toFixed(6)
+    };
 
     // Debug logging
-    console.log(`Indicators for ${symbol}: rsi=${rsi.toFixed(2)}, macd=${macdObj.macd.toFixed(2)}, signal=${macdObj.signal.toFixed(2)}, ema20=${ema20.toFixed(2)}, ema50=${ema50.toFixed(2)}, adx=${adx.toFixed(2)}, cci=${cci.toFixed(2)}, sar=${sar.toFixed(2)}, vwap=${vwap.toFixed(2)}, obv=${obv}, volOsc=${volOsc.toFixed(2)}, ichimoku.tenkan=${ichimoku.tenkan.toFixed(2)}, ichimoku.kijun=${ichimoku.kijun.toFixed(2)}, signal=${signalType}, pop=${pop}%`);
-
+    console.log(`Indicators for ${symbol}: rsi=${rsi.toFixed(2)}, macd=${formattedMacdObj.macd}, signal=${formattedMacdObj.signal}, ema20=${ema20.toFixed(2)}, ema50=${ema50.toFixed(2)}, adx=${adx.toFixed(2)}, cci=${cci.toFixed(2)}, sar=${sar.toFixed(2)}, vwap=${vwap.toFixed(2)}, obv=${obv}, volOsc=${volOsc.toFixed(2)}, ichimoku.tenkan=${ichimoku.tenkan.toFixed(2)}, ichimoku.kijun=${ichimoku.kijun.toFixed(2)}, signal=${signalType}, pop=${pop}%`);
 
     return {
       coin: symbol,
@@ -289,15 +279,14 @@
       rsi,
       estimated_profit: profitPct + "%",
       signal: signalType,
-      indicators: { rsi, macdObj, ema20, ema50, boll, adx, stochastic, cci, sar, vwap, atr, ichimoku, volOsc }
+      indicators: { rsi, macdObj: formattedMacdObj, ema20, ema50, boll, adx, stochastic, cci, sar, vwap, atr, ichimoku, volOsc }
     };
   }
-
 
   // --- Indicator Functions ---
   function calcEMA(values, period) {
     if (!values || values.length < period || !values.every(v => Number.isFinite(v) && v > 0)) {
-      console.log(`calcEMA failed: period=${period}, values=${values.slice(-5).map(v => v.toFixed(4))}, length=${values.length}`);
+      console.log(`calcEMA failed: period=${period}, values=${values.slice(-5).map(v => v.toFixed(6))}, length=${values.length}`);
       return 0;
     }
     const k = 2 / (period + 1);
@@ -308,13 +297,11 @@
     return Number.isFinite(ema) && ema > 0 ? ema : 0;
   }
 
-
   function calcEMAArray(values, period) {
     if (!values || values.length < period) {
-      console.log(`calcEMAArray failed: period=${period}, values=${values.slice(-5).map(v => v.toFixed(4))}, length=${values.length}`);
+      console.log(`calcEMAArray failed: period=${period}, values=${values.slice(-5).map(v => v.toFixed(6))}, length=${values.length}`);
       return [];
     }
-    // Relax validation to handle near-identical prices
     const validValues = values.filter(v => Number.isFinite(v) && v > 0);
     if (validValues.length < period) {
       console.log(`calcEMAArray failed: insufficient valid values=${validValues.length}, required=${period}`);
@@ -337,10 +324,9 @@
       }
       emaArray.push(ema);
     }
-    console.log(`calcEMAArray success: period=${period}, length=${emaArray.length}, last5=${emaArray.slice(-5).map(v => v.toFixed(4))}`);
+    console.log(`calcEMAArray success: period=${period}, length=${emaArray.length}, last5=${emaArray.slice(-5).map(v => v.toFixed(6))}`);
     return emaArray;
   }
-
 
   function calcRSI(values, period) {
     if (values.length < period + 1) return 0;
@@ -361,9 +347,8 @@
     return 100 - (100 / (1 + rs));
   }
 
-
   function calcMACD(values, fast = 12, slow = 26, signal = 9) {
-    console.log(`calcMACD input: length=${values.length}, last5=${values.slice(-5).map(v => v.toFixed(4))}`);
+    console.log(`calcMACD input: length=${values.length}, last5=${values.slice(-5).map(v => v.toFixed(6))}`);
     if (!values || values.length < slow + signal) {
       console.log(`calcMACD failed: insufficient data, length=${values.length}, required=${slow + signal}`);
       return { macd: 0, signal: 0 };
@@ -379,9 +364,13 @@
       console.log(`calcMACD failed: emaFastArray=${emaFastArray.length}, emaSlowArray=${emaSlowArray.length}, required=${signal}`);
       return { macd: 0, signal: 0 };
     }
-    const macdLine = emaFastArray.slice(-signal * 2).map((val, idx) => val - emaSlowArray.slice(-signal * 2)[idx]);
-    if (macdLine.some(v => !Number.isFinite(v))) {
-      console.log(`calcMACD failed: invalid macdLine values=${macdLine.slice(-5).map(v => v.toFixed(4))}`);
+    // Ensure macdLine has enough values
+    const macdLine = emaFastArray.slice(-signal * 2).map((val, idx) => {
+      const diff = val - emaSlowArray.slice(-signal * 2)[idx];
+      return Number.isFinite(diff) ? diff : 0;
+    });
+    if (macdLine.length < signal || macdLine.every(v => v === 0)) {
+      console.log(`calcMACD failed: invalid macdLine length=${macdLine.length}, values=${macdLine.slice(-5).map(v => v.toFixed(6))}`);
       return { macd: 0, signal: 0 };
     }
     const signalLineArray = calcEMAArray(macdLine, signal);
@@ -393,10 +382,9 @@
       macd: macdLine.at(-1) || 0,
       signal: signalLineArray.at(-1) || 0
     };
-    console.log(`calcMACD success: macd=${result.macd.toFixed(4)}, signal=${result.signal.toFixed(4)}`);
+    console.log(`calcMACD success: macd=${result.macd.toFixed(6)}, signal=${result.signal.toFixed(6)}`);
     return result;
   }
-
 
   function calcBollinger(values, period, mult) {
     if (values.length < period) return { upper: 0, middle: 0, lower: 0 };
@@ -406,7 +394,6 @@
     const stddev = Math.sqrt(variance);
     return { upper: mean + mult * stddev, middle: mean, lower: mean - mult * stddev };
   }
-
 
   function calcATR(highs, lows, closes, period = 14) {
     if (highs.length < period || lows.length < period || closes.length < period) return 0;
@@ -420,7 +407,6 @@
     const atrArray = calcEMAArray(trs, period);
     return atrArray[atrArray.length - 1] || 0;
   }
-
 
   function calcADX(highs, lows, closes, period) {
     if (highs.length < period + 1) return 0;
@@ -438,7 +424,6 @@
     return dx;
   }
 
-
   function calcStochastic(highs, lows, closes, kPeriod, dPeriod) {
     const sliceHigh = highs.slice(-kPeriod);
     const sliceLow = lows.slice(-kPeriod);
@@ -449,7 +434,6 @@
     return { k, d };
   }
 
-
   function calcCCI(highs, lows, closes, period) {
     if (highs.length < period) return 0;
     const typical = highs.map((h, i) => (h + lows[i] + closes[i]) / 3);
@@ -458,7 +442,6 @@
     const meanDev = tpSlice.reduce((a, b) => a + Math.abs(b - mean), 0) / period;
     return (typical.at(-1) - mean) / (0.015 * meanDev);
   }
-
 
   function calcSAR(highs, lows, step, maxStep) {
     if (highs.length < 2) return 0;
@@ -479,7 +462,6 @@
     return sar;
   }
 
-
   function calcVWAP(highs, lows, closes, volumes) {
     let cumPV = 0, cumVol = 0;
     for (let i = 0; i < closes.length; i++) {
@@ -490,7 +472,6 @@
     return cumPV / cumVol;
   }
 
-
   function calcOBV(closes, volumes) {
     let obv = 0;
     for (let i = 1; i < closes.length; i++) {
@@ -499,7 +480,6 @@
     }
     return obv;
   }
-
 
   function calcIchimoku(closes, highs, lows, tenkanPeriod = 9, kijunPeriod = 26) {
     if (closes.length < kijunPeriod) return { tenkan: 0, kijun: 0 };
@@ -512,14 +492,12 @@
     return { tenkan, kijun };
   }
 
-
   function calcVolumeOscillator(volumes, shortPeriod = 5, longPeriod = 20) {
     if (volumes.length < longPeriod) return 0;
     const shortEMA = calcEMA(volumes, shortPeriod);
     const longEMA = calcEMA(volumes, longPeriod);
     return ((shortEMA - longEMA) / longEMA) * 100;
   }
-
 
   function updateDashboard(filteredResults, allResults) {
     const sections = {
@@ -528,12 +506,10 @@
     };
     Object.values(sections).forEach(body => body.innerHTML = '');
 
-
     const sorted = { "Strong Buy": [], "Strong Sell": [] };
     filteredResults.forEach(r => {
       if (sorted[r.signal]) sorted[r.signal].push(r);
     });
-
 
     for (let key in sorted) {
       sorted[key].sort((a, b) => parseFloat(b.estimated_profit) - parseFloat(a.estimated_profit));
@@ -555,22 +531,18 @@
     }
   }
 
-
   function updateRawData(results) {
     document.getElementById('raw-data').value = JSON.stringify(results, null, 2);
   }
-
 
   function startSpinner(show) {
     document.getElementById('spinner').style.display = show ? 'inline-block' : 'none';
     document.getElementById('refresh-btn').disabled = show;
   }
 
-
   function updateProgress(percent) {
     document.getElementById('progress-bar').style.width = percent + "%";
   }
-
 
   function startCountdown(seconds) {
     const countdownEl = document.getElementById('countdown');
@@ -583,13 +555,11 @@
     }, 1000);
   }
 
-
   function formatTime(sec) {
     const m = String(Math.floor(sec / 60)).padStart(2, '0');
     const s = String(sec % 60).padStart(2, '0');
     return `${m}:${s}`;
   }
-
 
   fetchData();
 </script>
