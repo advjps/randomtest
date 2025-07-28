@@ -153,7 +153,7 @@
     const cleanLows5m = lows5m.filter(v => Number.isFinite(v) && v > 0);
     const cleanVolumes5m = volumes5m.filter(v => Number.isFinite(v) && v >= 0);
     const cleanCloses1m = closes1m.filter(v => Number.isFinite(v) && v > 0);
-    if (cleanCloses5m.length < 35 || cleanHighs5m.length < 35 || cleanLows5m.length < 35 || cleanVolumes5m.length < 35 || cleanCloses1m.length < 9) {
+    if (cleanCloses5m.length < 50 || cleanHighs5m.length < 50 || cleanLows5m.length < 50 || cleanVolumes5m.length < 50 || cleanCloses1m.length < 9) {
       console.log(`Insufficient data for ${symbol}: 5m Closes=${cleanCloses5m.length}, 1m Closes=${cleanCloses1m.length}`);
       return {
         coin: symbol,
@@ -174,6 +174,7 @@
     const macdObj = calcMACD(cleanCloses5m, 12, 26, 9);
     const ema20 = calcEMA(cleanCloses5m, 20);
     const ema50 = calcEMA(cleanCloses5m, 50);
+    const ema9_5m = calcEMA(cleanCloses5m, 9);
     const boll = calcBollinger(cleanCloses5m, 20, 2);
     const atr = calcATR(cleanHighs5m, cleanLows5m, cleanCloses5m, 14);
     const adx = calcADX(cleanHighs5m, cleanLows5m, cleanCloses5m, 14);
@@ -206,31 +207,31 @@
     const isStrongTrend = adx > 25 && Number.isFinite(adx);
     const isBullishIchimoku = ichimoku.tenkan > ichimoku.kijun && Number.isFinite(ichimoku.tenkan) && Number.isFinite(ichimoku.kijun);
     const isBearishIchimoku = ichimoku.tenkan < ichimoku.kijun && Number.isFinite(ichimoku.tenkan) && Number.isFinite(ichimoku.kijun);
-    const isValidBuyRSI = rsi > 20 && rsi < 90;
-    const isValidSellRSI = rsi < 75 && rsi > 15;
+    const isValidBuyRSI = rsi > 15 && rsi < 95;
+    const isValidSellRSI = rsi < 80 && rsi > 10;
     const coreBullishCount = [isBullishMACD, isBullishEMA, isStrongTrend, isBullishIchimoku, isBullishEntry].filter(Boolean).length;
     const coreBearishCount = [isBearishMACD, isBearishEMA, isStrongTrend, isBearishIchimoku, isBearishEntry].filter(Boolean).length;
-    if (coreBullishCount >= 2 && isValidBuyRSI) {
+    if (coreBullishCount >= 1 && isValidBuyRSI) {
       score += coreBullishCount;
       scoreDetails.push(`coreBullishCount=${coreBullishCount}`);
-      if (rsi > 50 && rsi < 90) { score += 1.0; scoreDetails.push('rsi>50:+1.0'); }
+      if (rsi > 45 && rsi < 95) { score += 1.0; scoreDetails.push('rsi>45:+1.0'); }
       if (price > boll.middle) { score += 1.5; scoreDetails.push('aboveBBMiddle:+1.5'); }
       if (price > boll.lower) { score += 0.5; scoreDetails.push('aboveBBLower:+0.5'); }
-      if (price > ema20) { score += 0.5; scoreDetails.push('aboveEMA20:+0.5'); }
+      if (price > ema9_5m) { score += 0.5; scoreDetails.push('aboveEMA9_5m:+0.5'); }
       if (stochastic.k > stochastic.d && stochastic.k < 80) { score += 1.0; scoreDetails.push('stochasticBullish:+1.0'); }
-      if (cci > 25 && cci < 200) { score += 0.75; scoreDetails.push('cci>25:+0.75'); }
+      if (cci > 0 && cci < 200) { score += 0.75; scoreDetails.push('cci>0:+0.75'); }
       if (price > sar) { score += 1.0; scoreDetails.push('aboveSAR:+1.0'); }
       if (price > vwap) { score += 1.0; scoreDetails.push('aboveVWAP:+1.0'); }
       if (obv > 0) { score += 1.0; scoreDetails.push('obv>0:+1.0'); }
       if (volOsc > -10) { score += 0.5; scoreDetails.push('volOsc>-10:+0.5'); }
-    } else if (coreBearishCount >= 3 && isValidSellRSI) {
+    } else if (coreBearishCount >= 4 && isValidSellRSI) {
       score -= coreBearishCount;
       scoreDetails.push(`coreBearishCount=${coreBearishCount}`);
-      if (rsi < 45 && rsi > 15) { score -= 0.75; scoreDetails.push('rsi<45:-0.75'); }
+      if (rsi < 45 && rsi > 10) { score -= 0.5; scoreDetails.push('rsi<45:-0.5'); }
       if (price < boll.middle) { score -= 1.5; scoreDetails.push('belowBBMiddle:-1.5'); }
       if (price < boll.upper) { score -= 0.5; scoreDetails.push('belowBBUpper:-0.5'); }
       if (stochastic.k < stochastic.d && stochastic.k > 20) { score -= 1.0; scoreDetails.push('stochasticBearish:-1.0'); }
-      if (cci < -50 && cci > -200) { score -= 0.5; scoreDetails.push('cci<-50:-0.5'); }
+      if (cci < -50 && cci > -200) { score -= 0.25; scoreDetails.push('cci<-50:-0.25'); }
       if (price < sar) { score -= 1.0; scoreDetails.push('belowSAR:-1.0'); }
       if (price < vwap) { score -= 1.0; scoreDetails.push('belowVWAP:-1.0'); }
       if (obv < 0) { score -= 1.0; scoreDetails.push('obv<0:-1.0'); }
@@ -239,9 +240,9 @@
     const pop = Math.min(100, Math.round((Math.abs(score) / 12) * 100));
 
     // Signal
-    const signalType = score >= 4.5 ? "Strong Buy" :
-                       score >= 4 ? "Buy" :
-                       score <= -6 ? "Strong Sell" :
+    const signalType = score >= 4.0 ? "Strong Buy" :
+                       score >= 3 ? "Buy" :
+                       score <= -7 ? "Strong Sell" :
                        score <= -4 ? "Sell" : "Neutral";
 
     // TP & SL
@@ -266,11 +267,10 @@
 
     // Format indicators for logging
     const formatIndicator = (value, decimals = 2) => Number.isFinite(value) ? value.toFixed(decimals) : '0.00';
-    const formatSmallIndicator = (value, decimals = 10) => Number.isFinite(value) && value < 0.01 ? value.toFixed(decimals) : value.toFixed(2);
+    const formatSmallIndicator = (value, decimals = 10) => Number.isFinite(value) && Math.abs(value) < 0.01 ? value.toFixed(decimals) : value.toFixed(2);
 
     // Debug logging
-    console.log(`Indicators for ${symbol}: rsi=${formatIndicator(rsi)}, macd=${formattedMacdObj.macd}, signal=${formattedMacdObj.signal}, ema20=${formatSmallIndicator(ema20)}, ema50=${formatSmallIndicator(ema50)}, adx=${formatIndicator(adx)}, cci=${formatIndicator(cci)}, sar=${formatSmallIndicator(sar)}, vwap=${formatSmallIndicator(vwap)}, obv=${obv}, volOsc=${formatIndicator(volOsc)}, ichimoku.tenkan=${formatSmallIndicator(ichimoku.tenkan)}, ichimoku.kijun=${formatSmallIndicator(ichimoku.kijun)}, signal=${signalType}, pop=${pop}%, coreBullishCount=${coreBullishCount}, coreBearishCount=${coreBearishCount}, isBullishMACD=${isBullishMACD}, isBullishEMA=${isBullishEMA}, isStrongTrend=${isStrongTrend}, isBullishIchimoku=${isBullishIchimoku}, isBullishEntry=${isBullishEntry}, isBearishMACD=${isBearishMACD}, isBearishEMA=${isBearishEMA}, isBearishIchimoku=${isBearishIchimoku}, isBearishEntry=${isBearishEntry}, score=${score.toFixed(2)}, scoreDetails=[${scoreDetails.join(', ')}]`);
-
+    console.log(`Indicators for ${symbol}: rsi=${formatIndicator(rsi)}, macd=${formattedMacdObj.macd}, signal=${formattedMacdObj.signal}, ema20=${formatSmallIndicator(ema20)}, ema50=${formatSmallIndicator(ema50)}, ema9_5m=${formatSmallIndicator(ema9_5m)}, adx=${formatIndicator(adx)}, cci=${formatIndicator(cci)}, sar=${formatSmallIndicator(sar)}, vwap=${formatSmallIndicator(vwap)}, obv=${obv}, volOsc=${formatIndicator(volOsc)}, ichimoku.tenkan=${formatSmallIndicator(ichimoku.tenkan)}, ichimoku.kijun=${formatSmallIndicator(ichimoku.kijun)}, signal=${signalType}, pop=${pop}%, coreBullishCount=${coreBullishCount}, coreBearishCount=${coreBearishCount}, isBullishMACD=${isBullishMACD}, isBullishEMA=${isBullishEMA}, isStrongTrend=${isStrongTrend}, isBullishIchimoku=${isBullishIchimoku}, isBullishEntry=${isBullishEntry}, isBearishMACD=${isBearishMACD}, isBearishEMA=${isBearishEMA}, isBearishIchimoku=${isBearishIchimoku}, isBearishEntry=${isBearishEntry}, score=${score.toFixed(2)}, scoreDetails=[${scoreDetails.join(', ')}]`);
     return {
       coin: symbol,
       price,
@@ -287,25 +287,33 @@
 
   function calcEMA(values, period) {
     if (!values || values.length < period || !values.every(v => Number.isFinite(v) && v > 0)) {
-      console.log(`calcEMA failed: period=${period}, values=${values.slice(-5).map(v => v.toFixed(8))}, length=${values.length}`);
+      console.warn(`calcEMA failed: period=${period}, values=${values.slice(-5).map(v => v.toFixed(8)), length=values.length}`);
       return 0;
     }
     const k = 2 / (period + 1);
     let ema = values.slice(0, period).reduce((a, b) => a + b) / period;
+    if (!Number.isFinite(ema) || ema <= 0) {
+      console.warn(`calcEMA initial invalid: ema=${ema}`);
+      return 0;
+    }
     for (let i = period; i < values.length; i++) {
       ema = values[i] * k + ema * (1 - k);
+      if (!Number.isFinite(ema) || ema <= 0) {
+        console.warn(`calcEMA iteration invalid at ${i}: ema=${ema}, value=${values[i]}`);
+        return 0;
+      }
     }
-    return Number.isFinite(ema) && ema > 0 ? ema : 0;
+    return ema;
   }
 
   function calcEMAArray(values, period) {
     if (!values || values.length < period) {
-      console.log(`calcEMAArray failed: period=${period}, values=${values.slice(-5).map(v => v.toFixed(8))}, length=${values.length}`);
+      console.log(`calcEMAArray failed: period=${period}, values=${values.slice(-5).map(v => v.toFixed(8)), length=values.length}`);
       return [];
     }
     const validValues = values.filter(v => Number.isFinite(v) && v > 0);
     if (validValues.length < period) {
-      console.log(`calcEMAArray failed: insufficient valid values=${validValues.length}, required=${period}`);
+      console.log(`calcEMAArray failed: validValues=${validValues.length, required=${period}}`);
       return [];
     }
     const k = 2 / (period + 1);
@@ -320,8 +328,7 @@
       ema = validValues[i] * k + ema * (1 - k);
       if (!Number.isFinite(ema) || ema <= 0) {
         console.log(`calcEMAArray iteration ${i} invalid: ema=${ema}, value=${validValues[i]}`);
-        emaArray = [];
-        break;
+        return [];
       }
       emaArray.push(ema);
     }
@@ -330,11 +337,14 @@
   }
 
   function calcRSI(values, period) {
-    if (values.length < period + 1) return 0;
+    if (!values || values.length < period + 1 || !values.every(v => Number.isFinite(v))) {
+      console.log(`calcRSI failed: period=${period}, length=${values.length}`);
+      return -1;
+    }
     let gains = 0, losses = 0;
     for (let i = 1; i <= period; i++) {
       const diff = values[i] - values[i - 1];
-      if (diff >= 0) gains += diff; else losses -= diff;
+      if (diff >= 0) gains += diff; else losses += Math.abs(diff);
     }
     let avgGain = gains / period;
     let avgLoss = losses / period;
@@ -345,50 +355,70 @@
     }
     if (avgLoss === 0) return 100;
     const rs = avgGain / avgLoss;
-    return 100 - (100 / (1 + rs));
+    const rsi = 100 - (100 / (1 + rs));
+    return Number.isFinite(rsi) ? rsi : -1;
   }
 
   function calcMACD(values, fast = 12, slow = 26, signal = 9) {
     console.log(`calcMACD input: length=${values.length}, last5=${values.slice(-5).map(v => v.toFixed(8))}`);
     if (!values || values.length < slow + signal) {
-      console.log(`calcMACD failed: insufficient data, length=${values.length}, required=${slow + signal}`);
+      console.warn(`calcMACD failed: insufficient data, length=${values.length}, required=${slow + signal}`);
       return { macd: 0, signal: 0 };
     }
     const validValues = values.filter(v => Number.isFinite(v) && v > 0);
     if (validValues.length < slow + signal) {
-      console.log(`calcMACD failed: insufficient valid values=${validValues.length}, required=${slow + signal}`);
+      console.warn(`calcMACD failed: validValues=${validValues.length}, required=${slow + signal}`);
       return { macd: 0, signal: 0 };
     }
     const emaFastArray = calcEMAArray(validValues, fast);
     const emaSlowArray = calcEMAArray(validValues, slow);
-    if (emaFastArray.length < slow + signal || emaSlowArray.length < slow + signal) {
-      console.log(`calcMACD failed: emaFastArray=${emaFastArray.length}, emaSlowArray=${emaSlowArray.length}, required=${slow + signal}`);
+    if (emaFastArray.length < signal || emaSlowArray.length < signal) {
+      console.warn(`calcMACD failed: emaFastArray=${emaFastArray.length}, emaSlowArray=${emaSlowArray.length}, required=${signal}`);
       return { macd: 0, signal: 0 };
     }
-    const macdLine = emaFastArray.slice(-slow - signal).map((val, idx) => {
-      const diff = val - emaSlowArray.slice(-slow - signal)[idx];
-      return Number.isFinite(diff) ? diff : 0;
-    });
+    const minLength = Math.min(emaFastArray.length, emaSlowArray.length);
+    const macdLine = [];
+    for (let i = 0; i < minLength; i++) {
+      const diff = emaFastArray[i] - emaSlowArray[i];
+      if (!Number.isFinite(diff)) {
+        console.warn(`calcMACD invalid diff at ${i}: fast=${emaFastArray[i]}, slow=${emaSlowArray[i]}`);
+        return { macd: 0, signal: 0 };
+      }
+      macdLine.push(diff);
+    }
+    if (macdLine.length < signal) {
+      console.warn(`calcMACD insufficient macdLine: length=${macdLine.length}, required=${signal}`);
+      return { macd: 0, signal: 0 };
+    }
     const signalLineArray = calcEMAArray(macdLine, signal);
     if (signalLineArray.length === 0) {
-      console.log(`calcMACD failed: signalLineArray empty`);
+      console.warn(`calcMACD failed: signalLineArray empty`);
       return { macd: 0, signal: 0 };
     }
-    const result = {
-      macd: macdLine.at(-1) || 0,
-      signal: signalLineArray.at(-1) || 0
-    };
-    console.log(`calcMACD success: macd=${result.macd.toFixed(12)}, signal=${result.signal.toFixed(12)}`);
-    return result;
+    const macd = macdLine.at(-1);
+    const signalVal = signalLineArray.at(-1);
+    if (!Number.isFinite(macd) || !Number.isFinite(signalVal)) {
+      console.warn(`calcMACD invalid output: macd=${macd}, signal=${signalVal}`);
+      return { macd: 0, signal: 0 };
+    }
+    console.log(`calcMACD success: macd=${macd.toFixed(12)}, signal=${signalVal.toFixed(12)}, macdLineLast5=${macdLine.slice(-5).map(v => v.toFixed(8)), signalLineLast5=${signalLineArray.slice(-5).map(v => v.toFixed(8))}`);
+    return { macd, signal: signalVal };
   }
 
   function calcBollinger(values, period, mult) {
-    if (values.length < period) return { upper: 0, middle: 0, lower: 0 };
+    if (!values || values.length < period || !values.every(v => Number.isFinite(v))) {
+      console.log(`calcBollinger failed: period=${period}, length=${values.length}`);
+      return { upper: 0, middle: 0, lower: 0 };
+    }
     const slice = values.slice(-period);
     const mean = slice.reduce((a, b) => a + b) / period;
     const variance = slice.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / period;
     const stddev = Math.sqrt(variance);
-    return { upper: mean + mult * stddev, middle: mean, lower: mean - mult * stddev };
+    return {
+      upper: Number.isFinite(mean + mult * stddev) ? mean + mult * stddev : 0,
+      middle: Number.isFinite(mean) ? mean : 0,
+      lower: Number.isFinite(mean - mult * stddev) ? mean - mult * stddev : 0
+    };
   }
 
   function calcATR(highs, lows, closes, period = 14) {
