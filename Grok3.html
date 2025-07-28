@@ -170,7 +170,7 @@
     }
 
     // Dynamic scale factor
-    const scaleFactor = price < 0.00001 ? 1e10 : price < 0.0001 ? 1e8 : price < 0.01 ? 1e6 : 1;
+    const scaleFactor = price < 0.00001 ? 1e12 : price < 0.0001 ? 1e10 : price < 0.01 ? 1e8 : 1;
     const scaledCloses5m = cleanCloses5m.map(v => v * scaleFactor);
 
     // Indicators (5-minute data)
@@ -213,9 +213,9 @@
     const isValidSellRSI = rsi < 70 && rsi > 20;
     const coreBullishCount = [isBullishMACD, isBullishEMA, isStrongTrend, isBullishIchimoku, isBullishEntry].filter(Boolean).length;
     const coreBearishCount = [isBearishMACD, isBearishEMA, isStrongTrend, isBearishIchimoku, isBearishEntry].filter(Boolean).length;
-    if (coreBullishCount >= 3 && isValidBuyRSI) {
+    if (coreBullishCount >= 2 && isValidBuyRSI) {
       score += coreBullishCount;
-      if (rsi > 55 && rsi < 70) score += 1.5;
+      if (rsi > 60 && rsi < 70) score += 1.5;
       if (price > boll.middle) score += 1.5;
       if (stochastic.k > stochastic.d && stochastic.k < 80) score += 1;
       if (cci > 100 && cci < 200) score += 0.5;
@@ -237,8 +237,8 @@
     const pop = Math.min(100, Math.round((Math.abs(score) / 11.5) * 100));
 
     // Signal
-    const signalType = score >= 6 ? "Strong Buy" :
-                       score >= 5 ? "Buy" :
+    const signalType = score >= 5.5 ? "Strong Buy" :
+                       score >= 4 ? "Buy" :
                        score <= -8 ? "Strong Sell" :
                        score <= -5 ? "Sell" : "Neutral";
 
@@ -258,16 +258,16 @@
 
     // Format MACD for JSON
     const formattedMacdObj = {
-      macd: Number(macdObj.macd / scaleFactor).toFixed(10),
-      signal: Number(macdObj.signal / scaleFactor).toFixed(10)
+      macd: Number(macdObj.macd / scaleFactor).toFixed(12),
+      signal: Number(macdObj.signal / scaleFactor).toFixed(12)
     };
 
     // Format indicators for logging
     const formatIndicator = (value, decimals = 2) => Number.isFinite(value) ? value.toFixed(decimals) : '0.00';
-    const formatSmallIndicator = (value, decimals = 8) => Number.isFinite(value) && value < 0.01 ? value.toFixed(decimals) : value.toFixed(2);
+    const formatSmallIndicator = (value, decimals = 10) => Number.isFinite(value) && value < 0.01 ? value.toFixed(decimals) : value.toFixed(2);
 
     // Debug logging
-    console.log(`Indicators for ${symbol}: rsi=${formatIndicator(rsi)}, macd=${formattedMacdObj.macd}, signal=${formattedMacdObj.signal}, ema20=${formatSmallIndicator(ema20)}, ema50=${formatSmallIndicator(ema50)}, adx=${formatIndicator(adx)}, cci=${formatIndicator(cci)}, sar=${formatSmallIndicator(sar)}, vwap=${formatSmallIndicator(vwap)}, obv=${obv}, volOsc=${formatIndicator(volOsc)}, ichimoku.tenkan=${formatSmallIndicator(ichimoku.tenkan)}, ichimoku.kijun=${formatSmallIndicator(ichimoku.kijun)}, signal=${signalType}, pop=${pop}%`);
+    console.log(`Indicators for ${symbol}: rsi=${formatIndicator(rsi)}, macd=${formattedMacdObj.macd}, signal=${formattedMacdObj.signal}, ema20=${formatSmallIndicator(ema20)}, ema50=${formatSmallIndicator(ema50)}, adx=${formatIndicator(adx)}, cci=${formatIndicator(cci)}, sar=${formatSmallIndicator(sar)}, vwap=${formatSmallIndicator(vwap)}, obv=${obv}, volOsc=${formatIndicator(volOsc)}, ichimoku.tenkan=${formatSmallIndicator(ichimoku.tenkan)}, ichimoku.kijun=${formatSmallIndicator(ichimoku.kijun)}, signal=${signalType}, pop=${pop}%, coreBullishCount=${coreBullishCount}, isBullishMACD=${isBullishMACD}, isBullishEMA=${isBullishEMA}, isStrongTrend=${isStrongTrend}, isBullishIchimoku=${isBullishIchimoku}, isBullishEntry=${isBullishEntry}`);
 
     return {
       coin: symbol,
@@ -346,7 +346,7 @@
     return 100 - (100 / (1 + rs));
   }
 
-  function calcMACD(values, fast = 12, slow = 26, signal = 9) {
+  function calcMACD(values, fast = 12, slow = 26, signal = 5) {
     console.log(`calcMACD input: length=${values.length}, last5=${values.slice(-5).map(v => v.toFixed(8))}`);
     if (!values || values.length < slow + signal) {
       console.log(`calcMACD failed: insufficient data, length=${values.length}, required=${slow + signal}`);
@@ -359,19 +359,26 @@
     }
     const emaFastArray = calcEMAArray(validValues, fast);
     const emaSlowArray = calcEMAArray(validValues, slow);
-    if (emaFastArray.length < signal * 3 || emaSlowArray.length < signal * 3) {
-      console.log(`calcMACD failed: emaFastArray=${emaFastArray.length}, emaSlowArray=${emaSlowArray.length}, required=${signal * 3}`);
+    if (emaFastArray.length < signal * 4 || emaSlowArray.length < signal * 4) {
+      console.log(`calcMACD failed: emaFastArray=${emaFastArray.length}, emaSlowArray=${emaSlowArray.length}, required=${signal * 4}`);
       return { macd: 0, signal: 0 };
     }
-    const macdLine = emaFastArray.slice(-signal * 3).map((val, idx) => {
-      const diff = val - emaSlowArray.slice(-signal * 3)[idx];
-      return Number.isFinite(diff) && Math.abs(diff) > 1e-10 ? diff : 0;
+    const macdLine = emaFastArray.slice(-signal * 4).map((val, idx) => {
+      const diff = val - emaSlowArray.slice(-signal * 4)[idx];
+      return Number.isFinite(diff) && Math.abs(diff) > 1e-12 ? diff : 0;
     });
-    if (macdLine.length < signal || macdLine.filter(v => Math.abs(v) > 1e-10).length < signal) {
-      console.log(`calcMACD failed: invalid macdLine length=${macdLine.length}, validValues=${macdLine.filter(v => Math.abs(v) > 1e-10).length}, required=${signal}`);
-      return { macd: 0, signal: 0 };
+    let signalPeriod = signal;
+    let validMacdLine = macdLine.filter(v => Math.abs(v) > 1e-12);
+    if (validMacdLine.length < signal) {
+      console.log(`calcMACD warning: insufficient valid macdLine values=${validMacdLine.length}, required=${signal}, attempting fallback with signal=3`);
+      signalPeriod = 3;
+      validMacdLine = macdLine.slice(-signal * 4).filter(v => Math.abs(v) > 1e-12);
+      if (validMacdLine.length < signalPeriod) {
+        console.log(`calcMACD failed: fallback failed, valid macdLine length=${validMacdLine.length}, required=${signalPeriod}`);
+        return { macd: 0, signal: 0 };
+      }
     }
-    const signalLineArray = calcEMAArray(macdLine, signal);
+    const signalLineArray = calcEMAArray(macdLine.slice(-signal * 4), signalPeriod);
     if (signalLineArray.length === 0) {
       console.log(`calcMACD failed: signalLineArray empty`);
       return { macd: 0, signal: 0 };
@@ -380,7 +387,7 @@
       macd: macdLine.at(-1) || 0,
       signal: signalLineArray.at(-1) || 0
     };
-    console.log(`calcMACD success: macd=${result.macd.toFixed(8)}, signal=${result.signal.toFixed(8)}`);
+    console.log(`calcMACD success: macd=${result.macd.toFixed(12)}, signal=${result.signal.toFixed(12)}, signalPeriod=${signalPeriod}`);
     return result;
   }
 
