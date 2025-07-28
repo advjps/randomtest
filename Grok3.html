@@ -201,23 +201,24 @@
     let scoreDetails = [];
     const isBullishMACD = Number.isFinite(macdObj.macd) && Number.isFinite(macdObj.signal) && macdObj.macd > macdObj.signal;
     const isBearishMACD = Number.isFinite(macdObj.macd) && Number.isFinite(macdObj.signal) && macdObj.macd < macdObj.signal;
-    const isBullishEMA = ema20 > ema50 && Number.isFinite(ema20) && Number.isFinite(ema50);
-    const isBearishEMA = ema20 < ema50 && Number.isFinite(ema20) && Number.isFinite(ema50);
+    const isBullishEMA = ema20 > ema50 * 0.999 && Number.isFinite(ema20) && Number.isFinite(ema50);
+    const isBearishEMA = ema20 < ema50 * 0.999 && Number.isFinite(ema20) && Number.isFinite(ema50);
     const isStrongTrend = adx > 25 && Number.isFinite(adx);
     const isBullishIchimoku = ichimoku.tenkan > ichimoku.kijun && Number.isFinite(ichimoku.tenkan) && Number.isFinite(ichimoku.kijun);
     const isBearishIchimoku = ichimoku.tenkan < ichimoku.kijun && Number.isFinite(ichimoku.tenkan) && Number.isFinite(ichimoku.kijun);
-    const isValidBuyRSI = rsi > 25 && rsi < 85;
+    const isValidBuyRSI = rsi > 20 && rsi < 90;
     const isValidSellRSI = rsi < 75 && rsi > 15;
     const coreBullishCount = [isBullishMACD, isBullishEMA, isStrongTrend, isBullishIchimoku, isBullishEntry].filter(Boolean).length;
     const coreBearishCount = [isBearishMACD, isBearishEMA, isStrongTrend, isBearishIchimoku, isBearishEntry].filter(Boolean).length;
     if (coreBullishCount >= 2 && isValidBuyRSI) {
       score += coreBullishCount;
       scoreDetails.push(`coreBullishCount=${coreBullishCount}`);
-      if (rsi > 55 && rsi < 85) { score += 1.0; scoreDetails.push('rsi>55:+1.0'); }
+      if (rsi > 50 && rsi < 90) { score += 1.0; scoreDetails.push('rsi>50:+1.0'); }
       if (price > boll.middle) { score += 1.5; scoreDetails.push('aboveBBMiddle:+1.5'); }
       if (price > boll.lower) { score += 0.5; scoreDetails.push('aboveBBLower:+0.5'); }
+      if (price > ema20) { score += 0.5; scoreDetails.push('aboveEMA20:+0.5'); }
       if (stochastic.k > stochastic.d && stochastic.k < 80) { score += 1.0; scoreDetails.push('stochasticBullish:+1.0'); }
-      if (cci > 50 && cci < 200) { score += 0.75; scoreDetails.push('cci>50:+0.75'); }
+      if (cci > 25 && cci < 200) { score += 0.75; scoreDetails.push('cci>25:+0.75'); }
       if (price > sar) { score += 1.0; scoreDetails.push('aboveSAR:+1.0'); }
       if (price > vwap) { score += 1.0; scoreDetails.push('aboveVWAP:+1.0'); }
       if (obv > 0) { score += 1.0; scoreDetails.push('obv>0:+1.0'); }
@@ -225,11 +226,11 @@
     } else if (coreBearishCount >= 3 && isValidSellRSI) {
       score -= coreBearishCount;
       scoreDetails.push(`coreBearishCount=${coreBearishCount}`);
-      if (rsi < 45 && rsi > 15) { score -= 1.0; scoreDetails.push('rsi<45:-1.0'); }
+      if (rsi < 45 && rsi > 15) { score -= 0.75; scoreDetails.push('rsi<45:-0.75'); }
       if (price < boll.middle) { score -= 1.5; scoreDetails.push('belowBBMiddle:-1.5'); }
       if (price < boll.upper) { score -= 0.5; scoreDetails.push('belowBBUpper:-0.5'); }
       if (stochastic.k < stochastic.d && stochastic.k > 20) { score -= 1.0; scoreDetails.push('stochasticBearish:-1.0'); }
-      if (cci < -50 && cci > -200) { score -= 0.75; scoreDetails.push('cci<-50:-0.75'); }
+      if (cci < -50 && cci > -200) { score -= 0.5; scoreDetails.push('cci<-50:-0.5'); }
       if (price < sar) { score -= 1.0; scoreDetails.push('belowSAR:-1.0'); }
       if (price < vwap) { score -= 1.0; scoreDetails.push('belowVWAP:-1.0'); }
       if (obv < 0) { score -= 1.0; scoreDetails.push('obv<0:-1.0'); }
@@ -238,7 +239,7 @@
     const pop = Math.min(100, Math.round((Math.abs(score) / 12) * 100));
 
     // Signal
-    const signalType = score >= 5 ? "Strong Buy" :
+    const signalType = score >= 4.5 ? "Strong Buy" :
                        score >= 4 ? "Buy" :
                        score <= -6 ? "Strong Sell" :
                        score <= -4 ? "Sell" : "Neutral";
@@ -268,7 +269,7 @@
     const formatSmallIndicator = (value, decimals = 10) => Number.isFinite(value) && value < 0.01 ? value.toFixed(decimals) : value.toFixed(2);
 
     // Debug logging
-    console.log(`Indicators for ${symbol}: rsi=${formatIndicator(rsi)}, macd=${formattedMacdObj.macd}, signal=${formattedMacdObj.signal}, ema20=${formatSmallIndicator(ema20)}, ema50=${formatSmallIndicator(ema50)}, adx=${formatIndicator(adx)}, cci=${formatIndicator(cci)}, sar=${formatSmallIndicator(sar)}, vwap=${formatSmallIndicator(vwap)}, obv=${obv}, volOsc=${formatIndicator(volOsc)}, ichimoku.tenkan=${formatSmallIndicator(ichimoku.tenkan)}, ichimoku.kijun=${formatSmallIndicator(ichimoku.kijun)}, signal=${signalType}, pop=${pop}%, coreBullishCount=${coreBullishCount}, isBullishMACD=${isBullishMACD}, isBullishEMA=${isBullishEMA}, isStrongTrend=${isStrongTrend}, isBullishIchimoku=${isBullishIchimoku}, isBullishEntry=${isBullishEntry}, score=${score.toFixed(2)}, scoreDetails=[${scoreDetails.join(', ')}]`);
+    console.log(`Indicators for ${symbol}: rsi=${formatIndicator(rsi)}, macd=${formattedMacdObj.macd}, signal=${formattedMacdObj.signal}, ema20=${formatSmallIndicator(ema20)}, ema50=${formatSmallIndicator(ema50)}, adx=${formatIndicator(adx)}, cci=${formatIndicator(cci)}, sar=${formatSmallIndicator(sar)}, vwap=${formatSmallIndicator(vwap)}, obv=${obv}, volOsc=${formatIndicator(volOsc)}, ichimoku.tenkan=${formatSmallIndicator(ichimoku.tenkan)}, ichimoku.kijun=${formatSmallIndicator(ichimoku.kijun)}, signal=${signalType}, pop=${pop}%, coreBullishCount=${coreBullishCount}, coreBearishCount=${coreBearishCount}, isBullishMACD=${isBullishMACD}, isBullishEMA=${isBullishEMA}, isStrongTrend=${isStrongTrend}, isBullishIchimoku=${isBullishIchimoku}, isBullishEntry=${isBullishEntry}, isBearishMACD=${isBearishMACD}, isBearishEMA=${isBearishEMA}, isBearishIchimoku=${isBearishIchimoku}, isBearishEntry=${isBearishEntry}, score=${score.toFixed(2)}, scoreDetails=[${scoreDetails.join(', ')}]`);
 
     return {
       coin: symbol,
