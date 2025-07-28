@@ -170,7 +170,7 @@
     }
 
     // Dynamic scale factor
-    const scaleFactor = price < 0.0001 ? 1e8 : price < 0.01 ? 1e6 : 1;
+    const scaleFactor = price < 0.00001 ? 1e10 : price < 0.0001 ? 1e8 : price < 0.01 ? 1e6 : 1;
     const scaledCloses5m = cleanCloses5m.map(v => v * scaleFactor);
 
     // Indicators (5-minute data)
@@ -213,8 +213,8 @@
     const isValidSellRSI = rsi < 70 && rsi > 20;
     const coreBullishCount = [isBullishMACD, isBullishEMA, isStrongTrend, isBullishIchimoku, isBullishEntry].filter(Boolean).length;
     const coreBearishCount = [isBearishMACD, isBearishEMA, isStrongTrend, isBearishIchimoku, isBearishEntry].filter(Boolean).length;
-    if (coreBullishCount >= 4 && isValidBuyRSI) {
-      score += 4;
+    if (coreBullishCount >= 3 && isValidBuyRSI) {
+      score += coreBullishCount;
       if (rsi > 55 && rsi < 70) score += 1.5;
       if (price > boll.middle) score += 1.5;
       if (stochastic.k > stochastic.d && stochastic.k < 80) score += 1;
@@ -224,7 +224,7 @@
       if (obv > 0) score += 1;
       if (volOsc > 0) score += 1;
     } else if (coreBearishCount >= 4 && isValidSellRSI) {
-      score -= 4;
+      score -= coreBearishCount;
       if (rsi < 45 && rsi > 30) score -= 1.5;
       if (price < boll.middle) score -= 1.5;
       if (stochastic.k < stochastic.d && stochastic.k > 20) score -= 1;
@@ -237,7 +237,7 @@
     const pop = Math.min(100, Math.round((Math.abs(score) / 11.5) * 100));
 
     // Signal
-    const signalType = score >= 7 ? "Strong Buy" :
+    const signalType = score >= 6 ? "Strong Buy" :
                        score >= 5 ? "Buy" :
                        score <= -8 ? "Strong Sell" :
                        score <= -5 ? "Sell" : "Neutral";
@@ -258,12 +258,16 @@
 
     // Format MACD for JSON
     const formattedMacdObj = {
-      macd: Number(macdObj.macd / scaleFactor).toFixed(8),
-      signal: Number(macdObj.signal / scaleFactor).toFixed(8)
+      macd: Number(macdObj.macd / scaleFactor).toFixed(10),
+      signal: Number(macdObj.signal / scaleFactor).toFixed(10)
     };
 
+    // Format indicators for logging
+    const formatIndicator = (value, decimals = 2) => Number.isFinite(value) ? value.toFixed(decimals) : '0.00';
+    const formatSmallIndicator = (value, decimals = 8) => Number.isFinite(value) && value < 0.01 ? value.toFixed(decimals) : value.toFixed(2);
+
     // Debug logging
-    console.log(`Indicators for ${symbol}: rsi=${rsi.toFixed(2)}, macd=${formattedMacdObj.macd}, signal=${formattedMacdObj.signal}, ema20=${ema20.toFixed(2)}, ema50=${ema50.toFixed(2)}, adx=${adx.toFixed(2)}, cci=${cci.toFixed(2)}, sar=${sar.toFixed(2)}, vwap=${vwap.toFixed(2)}, obv=${obv}, volOsc=${volOsc.toFixed(2)}, ichimoku.tenkan=${ichimoku.tenkan.toFixed(2)}, ichimoku.kijun=${ichimoku.kijun.toFixed(2)}, signal=${signalType}, pop=${pop}%`);
+    console.log(`Indicators for ${symbol}: rsi=${formatIndicator(rsi)}, macd=${formattedMacdObj.macd}, signal=${formattedMacdObj.signal}, ema20=${formatSmallIndicator(ema20)}, ema50=${formatSmallIndicator(ema50)}, adx=${formatIndicator(adx)}, cci=${formatIndicator(cci)}, sar=${formatSmallIndicator(sar)}, vwap=${formatSmallIndicator(vwap)}, obv=${obv}, volOsc=${formatIndicator(volOsc)}, ichimoku.tenkan=${formatSmallIndicator(ichimoku.tenkan)}, ichimoku.kijun=${formatSmallIndicator(ichimoku.kijun)}, signal=${signalType}, pop=${pop}%`);
 
     return {
       coin: symbol,
@@ -281,7 +285,7 @@
 
   function calcEMA(values, period) {
     if (!values || values.length < period || !values.every(v => Number.isFinite(v) && v > 0)) {
-      console.log(`calcEMA failed: period=${period}, values=${values.slice(-5).map(v => v.toFixed(6))}, length=${values.length}`);
+      console.log(`calcEMA failed: period=${period}, values=${values.slice(-5).map(v => v.toFixed(8))}, length=${values.length}`);
       return 0;
     }
     const k = 2 / (period + 1);
@@ -294,7 +298,7 @@
 
   function calcEMAArray(values, period) {
     if (!values || values.length < period) {
-      console.log(`calcEMAArray failed: period=${period}, values=${values.slice(-5).map(v => v.toFixed(6))}, length=${values.length}`);
+      console.log(`calcEMAArray failed: period=${period}, values=${values.slice(-5).map(v => v.toFixed(8))}, length=${values.length}`);
       return [];
     }
     const validValues = values.filter(v => Number.isFinite(v) && v > 0);
@@ -319,7 +323,7 @@
       }
       emaArray.push(ema);
     }
-    console.log(`calcEMAArray success: period=${period}, length=${emaArray.length}, last5=${emaArray.slice(-5).map(v => v.toFixed(6))}`);
+    console.log(`calcEMAArray success: period=${period}, length=${emaArray.length}, last5=${emaArray.slice(-5).map(v => v.toFixed(8))}`);
     return emaArray;
   }
 
@@ -343,7 +347,7 @@
   }
 
   function calcMACD(values, fast = 12, slow = 26, signal = 9) {
-    console.log(`calcMACD input: length=${values.length}, last5=${values.slice(-5).map(v => v.toFixed(6))}`);
+    console.log(`calcMACD input: length=${values.length}, last5=${values.slice(-5).map(v => v.toFixed(8))}`);
     if (!values || values.length < slow + signal) {
       console.log(`calcMACD failed: insufficient data, length=${values.length}, required=${slow + signal}`);
       return { macd: 0, signal: 0 };
@@ -355,16 +359,16 @@
     }
     const emaFastArray = calcEMAArray(validValues, fast);
     const emaSlowArray = calcEMAArray(validValues, slow);
-    if (emaFastArray.length < signal || emaSlowArray.length < signal) {
-      console.log(`calcMACD failed: emaFastArray=${emaFastArray.length}, emaSlowArray=${emaSlowArray.length}, required=${signal}`);
+    if (emaFastArray.length < signal * 3 || emaSlowArray.length < signal * 3) {
+      console.log(`calcMACD failed: emaFastArray=${emaFastArray.length}, emaSlowArray=${emaSlowArray.length}, required=${signal * 3}`);
       return { macd: 0, signal: 0 };
     }
-    const macdLine = emaFastArray.slice(-Math.max(signal * 2, 10)).map((val, idx) => {
-      const diff = val - emaSlowArray.slice(-Math.max(signal * 2, 10))[idx];
-      return Number.isFinite(diff) && Math.abs(diff) > 1e-8 ? diff : 0;
+    const macdLine = emaFastArray.slice(-signal * 3).map((val, idx) => {
+      const diff = val - emaSlowArray.slice(-signal * 3)[idx];
+      return Number.isFinite(diff) && Math.abs(diff) > 1e-10 ? diff : 0;
     });
-    if (macdLine.length < signal || macdLine.every(v => v === 0)) {
-      console.log(`calcMACD failed: invalid macdLine length=${macdLine.length}, values=${macdLine.slice(-5).map(v => v.toFixed(6))}`);
+    if (macdLine.length < signal || macdLine.filter(v => Math.abs(v) > 1e-10).length < signal) {
+      console.log(`calcMACD failed: invalid macdLine length=${macdLine.length}, validValues=${macdLine.filter(v => Math.abs(v) > 1e-10).length}, required=${signal}`);
       return { macd: 0, signal: 0 };
     }
     const signalLineArray = calcEMAArray(macdLine, signal);
@@ -376,7 +380,7 @@
       macd: macdLine.at(-1) || 0,
       signal: signalLineArray.at(-1) || 0
     };
-    console.log(`calcMACD success: macd=${result.macd.toFixed(6)}, signal=${result.signal.toFixed(6)}`);
+    console.log(`calcMACD success: macd=${result.macd.toFixed(8)}, signal=${result.signal.toFixed(8)}`);
     return result;
   }
 
@@ -415,7 +419,7 @@
     const plusDI = (plusDM / tr) * 100;
     const minusDI = (minusDM / tr) * 100;
     const dx = Math.abs(plusDI - minusDI) / (plusDI + minusDI) * 100;
-    return dx;
+    return Number.isFinite(dx) ? dx : 0;
   }
 
   function calcStochastic(highs, lows, closes, kPeriod, dPeriod) {
@@ -425,7 +429,7 @@
     const lowest = Math.min(...sliceLow);
     const k = ((closes.at(-1) - lowest) / (highest - lowest)) * 100;
     const d = k;
-    return { k, d };
+    return { k: Number.isFinite(k) ? k : 0, d: Number.isFinite(d) ? d : 0 };
   }
 
   function calcCCI(highs, lows, closes, period) {
@@ -434,7 +438,7 @@
     const tpSlice = typical.slice(-period);
     const mean = tpSlice.reduce((a, b) => a + b) / period;
     const meanDev = tpSlice.reduce((a, b) => a + Math.abs(b - mean), 0) / period;
-    return (typical.at(-1) - mean) / (0.015 * meanDev);
+    return meanDev === 0 ? 0 : (typical.at(-1) - mean) / (0.015 * meanDev);
   }
 
   function calcSAR(highs, lows, step, maxStep) {
@@ -453,7 +457,7 @@
         if (highs[i] > sar) { uptrend = true; sar = ep; ep = highs[i]; af = step; }
       }
     }
-    return sar;
+    return Number.isFinite(sar) ? sar : 0;
   }
 
   function calcVWAP(highs, lows, closes, volumes) {
@@ -463,7 +467,7 @@
       cumPV += typicalPrice * volumes[i];
       cumVol += volumes[i];
     }
-    return cumPV / cumVol;
+    return cumVol === 0 ? 0 : cumPV / cumVol;
   }
 
   function calcOBV(closes, volumes) {
@@ -483,14 +487,14 @@
     const kijunLow = lows.slice(-kijunPeriod);
     const tenkan = (Math.max(...tenkanHigh) + Math.min(...tenkanLow)) / 2;
     const kijun = (Math.max(...kijunHigh) + Math.min(...kijunLow)) / 2;
-    return { tenkan, kijun };
+    return { tenkan: Number.isFinite(tenkan) ? tenkan : 0, kijun: Number.isFinite(kijun) ? kijun : 0 };
   }
 
   function calcVolumeOscillator(volumes, shortPeriod = 5, longPeriod = 20) {
     if (volumes.length < longPeriod) return 0;
     const shortEMA = calcEMA(volumes, shortPeriod);
     const longEMA = calcEMA(volumes, longPeriod);
-    return ((shortEMA - longEMA) / longEMA) * 100;
+    return longEMA === 0 ? 0 : ((shortEMA - longEMA) / longEMA) * 100;
   }
 
   function updateDashboard(filteredResults, allResults) {
