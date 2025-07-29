@@ -167,27 +167,98 @@
       };
     }
 
-    // Indicators (5-minute data)
-    const rsi = calcRSI(cleanCloses5m, 9);
-    const macdObj = calcMACD(cleanCloses5m, 12, 26, 9);
-    const ema20 = calcEMA(cleanCloses5m, 20);
-    const ema50 = calcEMA(cleanCloses5m, 50);
-    const ema9_5m = calcEMA(cleanCloses5m, 9);
-    const boll = calcBollinger(cleanCloses5m, 20, 2);
-    const atr = calcATR(cleanHighs5m, cleanLows5m, cleanCloses5m, 14);
-    const adx = calcADX(cleanHighs5m, cleanLows5m, cleanCloses5m, 14);
-    const stochastic = calcStochastic(cleanHighs5m, cleanLows5m, cleanCloses5m, 14, 3);
-    const cci = calcCCI(cleanHighs5m, cleanLows5m, cleanCloses5m, 20);
-    const sar = calcSAR(cleanHighs5m, cleanLows5m, 0.02, 0.2);
-    const vwap = calcVWAP(cleanHighs5m, cleanLows5m, cleanCloses5m, cleanVolumes5m);
-    const obv = calcOBV(cleanCloses5m, cleanVolumes5m);
-    const ichimoku = calcIchimoku(cleanCloses5m, cleanHighs5m, cleanLows5m, 9, 26);
-    const volOsc = calcVolumeOscillator(cleanVolumes5m, 5, 20);
+   // Ensure all data points are objects with 'close', 'high', 'low', 'volume' properties
+    // (Your fetchBinanceData function already does this, but keeping `cleanClosesXm` for clarity where only closes are needed)
+    const price = data5m[data5m.length - 1].close; // Current price from the latest 5m candle
 
-    // 1-minute entry confirmation
-    const ema9_1m = calcEMA(cleanCloses1m, 9);
-    const isBullishEntry = price > ema9_1m && Number.isFinite(ema9_1m);
-    const isBearishEntry = price < ema9_1m && Number.isFinite(ema9_1m);
+    // --- Data Validation (KEEP THIS AS IS) ---
+    const cleanCloses5m = data5m.map(d => d.close).filter(v => Number.isFinite(v) && v > 0);
+    const cleanHighs5m = data5m.map(d => d.high).filter(v => Number.isFinite(v) && v > 0);
+    const cleanLows5m = data5m.map(d => d.low).filter(v => Number.isFinite(v) && v > 0);
+    const cleanVolumes5m = data5m.map(d => d.volume).filter(v => Number.isFinite(v) && v >= 0);
+
+    const cleanCloses1m = data1m.map(d => d.close).filter(v => Number.isFinite(v) && v > 0);
+    const cleanHighs1m = data1m.map(d => d.high).filter(v => Number.isFinite(v) && v > 0);
+    const cleanLows1m = data1m.map(d => d.low).filter(v => Number.isFinite(v) && v > 0);
+    const cleanVolumes1m = data1m.map(d => d.volume).filter(v => Number.isFinite(v) && v >= 0);
+
+    // Check data sufficiency for *all* required indicators based on their periods.
+    // This is a more robust check now.
+    const minDataRequired = 50; // Max period for indicators like EMA50 or Bollinger (20) + lookback
+    if (data5m.length < minDataRequired || data1m.length < minDataRequired) { // Changed from `cleanCloses` to `dataXm.length`
+      console.error(`Insufficient raw data for ${symbol}: 5m length=${data5m.length}, 1m length=${data1m.length}`);
+      return {
+        coin: symbol,
+        price: price || 0,
+        tp: "0.0000",
+        sl: "0.0000",
+        leverage: "5x",
+        pop: 0,
+        rsi: 0,
+        estimated_profit: "0.00%",
+        signal: "Neutral",
+        indicators: {}
+      };
+    }
+    // --- END Data Validation ---
+
+
+    // --- Indicators (5-minute data - now returning arrays/objects) ---
+    // Pass the full data objects where indicator functions need more than just 'close' values
+    const rsiArray5m = calcRSI(data5m.map(d => d.close), 14); // Standard period 14
+    const macdObj5m = calcMACD(data5m.map(d => d.close), 12, 26, 9);
+    const ema20Array5m = calcEMA(data5m.map(d => d.close), 20);
+    const ema50Array5m = calcEMA(data5m.map(d => d.close), 50);
+    const ema9Array5m = calcEMA(data5m.map(d => d.close), 9);
+    const boll5m = calcBollinger(data5m.map(d => d.close), 20, 2); // Your existing function is fine, still returns single obj
+    const atr5m = calcATR(data5m.map(d => d.high), data5m.map(d => d.low), data5m.map(d => d.close), 14); // Your existing function
+    const adx5m = calcADX(data5m.map(d => d.high), data5m.map(d => d.low), data5m.map(d => d.close), 14); // Your existing function
+    const stochasticObj5m = calcStochastic(data5m.map(d => d.high), data5m.map(d => d.low), data5m.map(d => d.close), 14, 3);
+    const cci5m = calcCCI(data5m.map(d => d.high), data5m.map(d => d.low), data5m.map(d => d.close), 20); // Your existing function
+    const sar5m = calcSAR(data5m.map(d => d.high), data5m.map(d => d.low), 0.02, 0.2); // Your existing function
+    const vwap5m = calcVWAP(data5m.map(d => d.high), data5m.map(d => d.low), data5m.map(d => d.close), data5m.map(d => d.volume)); // Your existing function
+    const obvArray5m = calcOBV(data5m.map(d => d.close), data5m.map(d => d.volume));
+    const ichimoku5m = calcIchimoku(data5m.map(d => d.close), data5m.map(d => d.high), data5m.map(d => d.low), 9, 26); // Your existing function
+    const volOsc5m = calcVolumeOscillator(data5m.map(d => d.volume), 5, 20); // Your existing function
+
+    // --- 1-minute entry confirmation and other 1-min indicators ---
+    const ema9Array1m = calcEMA(data1m.map(d => d.close), 9);
+    const rsiArray1m = calcRSI(data1m.map(d => d.close), 14);
+    const macdObj1m = calcMACD(data1m.map(d => d.close), 12, 26, 9);
+    const obvArray1m = calcOBV(data1m.map(d => d.close), data1m.map(d => d.volume));
+
+
+    // --- Extract Latest Values for Scoring and Display ---
+    // Note: Use getLastValidValue for arrays, or .latest for indicator objects
+    const latestRSI5m = getLastValidValue(rsiArray5m);
+    const latestMACD5m = macdObj5m.latest.macd;
+    const latestMACDSignal5m = macdObj5m.latest.signal;
+    const latestMACDHist5m = macdObj5m.latest.histogram;
+    const latestEMA20_5m = getLastValidValue(ema20Array5m);
+    const latestEMA50_5m = getLastValidValue(ema50Array5m);
+    const latestEMA9_5m = getLastValidValue(ema9Array5m); // For 5m context
+    const latestStochK5m = stochasticObj5m.latest.k;
+    const latestStochD5m = stochasticObj5m.latest.d;
+    const latestOBV5m = getLastValidValue(obvArray5m);
+
+    const latestEMA9_1m = getLastValidValue(ema9Array1m);
+    const latestRSI1m = getLastValidValue(rsiArray1m);
+    const latestMACD1m = macdObj1m.latest.macd;
+    const latestMACDSignal1m = macdObj1m.latest.signal;
+    const latestMACDHist1m = macdObj1m.latest.histogram;
+    const latestOBV1m = getLastValidValue(obvArray1m);
+
+    // --- Price Action & Support/Resistance (using existing logic but with latest price) ---
+    // These still use your existing logic which operates on arrays
+    const support = Math.min(...cleanLows5m.slice(-10));
+    const resistance = Math.max(...cleanHighs5m.slice(-10));
+
+    // For the existing POP logic's isValidBuyRSI / isValidSellRSI,
+    // ensure `latestRSI5m` is used directly in their place.
+    // We will replace this entire POP section in the next step.
+
+    // Your current POP calculation and signal generation starts here
+    // ...
 
     // Support/Resistance (5-minute data, last 10 candles)
     const support = Math.min(...cleanLows5m.slice(-10));
