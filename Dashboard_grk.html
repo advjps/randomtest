@@ -146,11 +146,7 @@
     const price = data5m[data5m.length - 1].close; // Current price from the latest 5m candle
 
     // Data validation
-    const cleanCloses5m = closes5m.filter(v => Number.isFinite(v) && v > 0);
-    const cleanHighs5m = highs5m.filter(v => Number.isFinite(v) && v > 0);
-    const cleanLows5m = lows5m.filter(v => Number.isFinite(v) && v > 0);
-    const cleanVolumes5m = volumes5m.filter(v => Number.isFinite(v) && v >= 0);
-    const cleanCloses1m = closes1m.filter(v => Number.isFinite(v) && v > 0);
+   
     if (cleanCloses5m.length < 50 || cleanHighs5m.length < 50 || cleanLows5m.length < 50 || cleanVolumes5m.length < 50 || cleanCloses1m.length < 9) {
       console.error(`Insufficient data for ${symbol}: 5m Closes=${cleanCloses5m.length}, 1m Closes=${cleanCloses1m.length}`);
       return {
