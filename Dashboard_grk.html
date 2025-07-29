@@ -255,12 +255,6 @@
     // Your current POP calculation and signal generation starts here
     // ...
 
-    // Support/Resistance (5-minute data, last 10 candles)
-    const support = Math.min(...cleanLows5m.slice(-10));
-    const resistance = Math.max(...cleanHighs5m.slice(-10));
-    const isValidSupport = obv > 0;
-    const isValidResistance = obv < 0;
-
     // POP scoring
     let score = 0;
     let scoreDetails = [];
