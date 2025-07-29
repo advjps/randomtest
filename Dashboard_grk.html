@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crypto Leverage Trade Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f4; color: #333; margin: 0; padding: 10px; }
+    h1, h2 { text-align: center; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+    th, td { padding: 8px 5px; text-align: center; border-bottom: 1px solid #ddd; }
+    th { background: #007bff; color: white; }
+    td.bold { font-weight: bold; font-size: 15px; }
+    .progress-container { width: 100%; background: #ddd; border-radius: 5px; margin: 10px 0; }
+    .progress-bar { width: 0%; height: 12px; background: #007bff; border-radius: 5px; }
+    .spinner { display: none; margin-left: 10px; border: 3px solid #f3f3f3; border-top: 3px solid #007bff; border-radius: 50%; width: 16px; height: 16px; animation: spin 1s linear infinite; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+    .buy { background-color: #d8f8d8; }
+    .sell { background-color: #f8d8d8; }
+    .top-pick { background-color: #b5e7b5 !important; }
+    .top-pick-sell { background-color: #e7b5b5 !important; }
+    .pop-high { color: green; font-weight: bold; }
+    .pop-medium { color: orange; font-weight: bold; }
+    .pop-low { color: red; font-weight: bold; }
+    .raw-section { margin-top: 20px; background: #fff; padding: 10px; border-radius: 8px; }
+    #raw-data { width: 100%; height: 150px; font-size: 12px; font-family: monospace; display: none; }
+    button { margin: 5px; }
+    @media (max-width: 768px) { table { font-size: 11px; } td.bold { font-size: 13px; } }
+  </style>
+</head>
+<body>
+  <h1>Crypto Leverage Trade Dashboard</h1>
+  <p style="text-align:center;">Last Updated: <span id="last-update">--:--</span></p>
+  <p style="text-align:center;">Next Refresh Suggested In: <span id="countdown">--:--</span></p>
+  <div style="text-align:center;">
+    <button id="refresh-btn">Refresh Data</button>
+    <div class="spinner" id="spinner"></div>
+  </div>
+  <div class="progress-container"><div class="progress-bar" id="progress-bar"></div></div>
+
+  <div class="section" id="strong-buy-section">
+    <h2>Strong Buy</h2>
+    <table>
+      <thead>
+        <tr><th>Coin</th><th>Price</th><th>TP</th><th>SL</th><th>Leverage</th><th>POP</th><th>RSI</th><th>Estimated Profit</th></tr>
+      </thead>
+      <tbody id="strong-buy-body"></tbody>
+    </table>
+    <p id="strong-buy-filter"></p>
+  </div>
+
+  <div class="section" id="strong-sell-section">
+    <h2>Strong Sell</h2>
+    <table>
+      <thead>
+        <tr><th>Coin</th><th>Price</th><th>TP</th><th>SL</th><th>Leverage</th><th>POP</th><th>RSI</th><th>Estimated Profit</th></tr>
+      </thead>
+      <tbody id="strong-sell-body"></tbody>
+    </table>
+    <p id="strong-sell-filter"></p>
+  </div>
+
+  <div class="raw-section">
+    <button id="toggle-raw-btn">Show Raw Data</button>
+    <button id="copy-btn">Copy Raw Data</button>
+    <button id="download-btn">Download JSON</button>
+    <textarea id="raw-data" readonly></textarea>
+  </div>
+<script>
+  const coins = [
+    'BTCUSDT','ETHUSDT','DOGEUSDT','SOLUSDT','XRPUSDT','GALAUSDT','CFXUSDT','PEPEUSDT','ENAUSDT','PNUTUSDT',
+    'REZUSDT','SHIBUSDT','ETCUSDT','HBARUSDT','CKBUSDT','ARBUSDT','WLDUSDT','UNIUSDT','AVAXUSDT','XLMUSDT',
+    'WIFUSDT','AAVEUSDT'
+  ];
+  let countdownInterval;
+
+  document.getElementById('refresh-btn').addEventListener('click', fetchData);
+  document.getElementById('toggle-raw-btn').addEventListener('click', () => {
+    const rawBox = document.getElementById('raw-data');
+    rawBox.style.display = rawBox.style.display === 'none' ? 'block' : 'none';
+  });
+  document.getElementById('copy-btn').addEventListener('click', () => {
+    document.getElementById('raw-data').select();
+    document.execCommand('copy');
+    alert('Raw data copied!');
+  });
+  document.getElementById('download-btn').addEventListener('click', () => {
+    const blob = new Blob([document.getElementById('raw-data').value], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    const nowIST = new Date(new Date().getTime() + (5.5 * 60 * 60 * 1000));
+    const tsIST = nowIST.toISOString().replace(/[:.]/g,'-').replace('T', '_').split('.')[0];
+    link.download = `crypto_signals_${tsIST}_IST.json`;
+    link.click();
+  });
+
+  async function fetchData() {
+    clearInterval(countdownInterval);
+    startSpinner(true);
+    updateProgress(0);
+
+    let results = [];
+    for (let i = 0; i < coins.length; i++) {
+      const symbol = coins[i];
+      try {
+        const data5m = await fetchBinanceDataWithFallback(symbol, '5m');
+        const data1m = await fetchBinanceDataWithFallback(symbol, '1m');
+        const analysis = analyzeData(symbol, data5m, data1m);
+        results.push(analysis);
+      } catch (e) {
+        console.error(`Error fetching ${symbol}:`, e);
+      }
+      updateProgress(((i+1) / coins.length) * 100);
+    }
+
+    const filteredResults = results.filter(r => r.signal === "Strong Buy" || r.signal === "Strong Sell");
+    updateDashboard(filteredResults, results);
+    updateRawData(results);
+    document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+    startSpinner(false);
+    startCountdown(300);
+  }
+
+  async function fetchBinanceDataWithFallback(symbol, timeframe) {
+    const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${timeframe}&limit=100`;
+    try { return await fetchBinanceData(url); }
+    catch (err) {
+      const proxyUrl = `https://cors-anywhere.herokuapp.com/${url}`;
+      return await fetchBinanceData(proxyUrl);
+    }
+  }
+
+  async function fetchBinanceData(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    return data.map(d => ({ open: +d[1], high: +d[2], low: +d[3], close: +d[4], volume: +d[5] }));
+  }
+
+  function analyzeData(symbol, data5m, data1m) {
+    const closes5m = data5m.map(d => d.close);
+    const highs5m = data5m.map(d => d.high);
+    const lows5m = data5m.map(d => d.low);
+    const volumes5m = data5m.map(d => d.volume);
+    const closes1m = data1m.map(d => d.close);
+    const price = closes5m.at(-1);
+
+    // Data validation
+    const cleanCloses5m = closes5m.filter(v => Number.isFinite(v) && v > 0);
+    const cleanHighs5m = highs5m.filter(v => Number.isFinite(v) && v > 0);
+    const cleanLows5m = lows5m.filter(v => Number.isFinite(v) && v > 0);
+    const cleanVolumes5m = volumes5m.filter(v => Number.isFinite(v) && v >= 0);
+    const cleanCloses1m = closes1m.filter(v => Number.isFinite(v) && v > 0);
+    if (cleanCloses5m.length < 50 || cleanHighs5m.length < 50 || cleanLows5m.length < 50 || cleanVolumes5m.length < 50 || cleanCloses1m.length < 9) {
+      console.error(`Insufficient data for ${symbol}: 5m Closes=${cleanCloses5m.length}, 1m Closes=${cleanCloses1m.length}`);
+      return {
+        coin: symbol,
+        price: price || 0,
+        tp: "0.0000",
+        sl: "0.0000",
+        leverage: "5x",
+        pop: 0,
+        rsi: 0,
+        estimated_profit: "0.00%",
+        signal: "Neutral",
+        indicators: {}
+      };
+    }
+
+    // Indicators (5-minute data)
+    const rsi = calcRSI(cleanCloses5m, 9);
+    const macdObj = calcMACD(cleanCloses5m, 12, 26, 9);
+    const ema20 = calcEMA(cleanCloses5m, 20);
+    const ema50 = calcEMA(cleanCloses5m, 50);
+    const ema9_5m = calcEMA(cleanCloses5m, 9);
+    const boll = calcBollinger(cleanCloses5m, 20, 2);
+    const atr = calcATR(cleanHighs5m, cleanLows5m, cleanCloses5m, 14);
+    const adx = calcADX(cleanHighs5m, cleanLows5m, cleanCloses5m, 14);
+    const stochastic = calcStochastic(cleanHighs5m, cleanLows5m, cleanCloses5m, 14, 3);
+    const cci = calcCCI(cleanHighs5m, cleanLows5m, cleanCloses5m, 20);
+    const sar = calcSAR(cleanHighs5m, cleanLows5m, 0.02, 0.2);
+    const vwap = calcVWAP(cleanHighs5m, cleanLows5m, cleanCloses5m, cleanVolumes5m);
+    const obv = calcOBV(cleanCloses5m, cleanVolumes5m);
+    const ichimoku = calcIchimoku(cleanCloses5m, cleanHighs5m, cleanLows5m, 9, 26);
+    const volOsc = calcVolumeOscillator(cleanVolumes5m, 5, 20);
+
+    // 1-minute entry confirmation
+    const ema9_1m = calcEMA(cleanCloses1m, 9);
+    const isBullishEntry = price > ema9_1m && Number.isFinite(ema9_1m);
+    const isBearishEntry = price < ema9_1m && Number.isFinite(ema9_1m);
+
+    // Support/Resistance (5-minute data, last 10 candles)
+    const support = Math.min(...cleanLows5m.slice(-10));
+    const resistance = Math.max(...cleanHighs5m.slice(-10));
+    const isValidSupport = obv > 0;
+    const isValidResistance = obv < 0;
+
+    // POP scoring
+    let score = 0;
+    let scoreDetails = [];
+    const isBullishMACD = Number.isFinite(macdObj.macd) && Number.isFinite(macdObj.signal) && macdObj.macd > macdObj.signal;
+    const isBearishMACD = Number.isFinite(macdObj.macd) && Number.isFinite(macdObj.signal) && macdObj.macd < macdObj.signal;
+    const isBullishEMA = ema20 > ema50 * 0.999 && Number.isFinite(ema20) && Number.isFinite(ema50);
+    const isBearishEMA = ema20 < ema50 * 0.999 && Number.isFinite(ema20) && Number.isFinite(ema50);
+    const isStrongTrend = adx > 25 && Number.isFinite(adx);
+    const isBullishIchimoku = ichimoku.tenkan > ichimoku.kijun && Number.isFinite(ichimoku.tenkan) && Number.isFinite(ichimoku.kijun);
+    const isBearishIchimoku = ichimoku.tenkan < ichimoku.kijun && Number.isFinite(ichimoku.tenkan) && Number.isFinite(ichimoku.kijun);
+    const isValidBuyRSI = rsi > 15 && rsi < 95;
+    const isValidSellRSI = rsi < 80 && rsi > 10;
+    const coreBullishCount = [isBullishMACD, isBullishEMA, isStrongTrend, isBullishIchimoku, isBullishEntry].filter(Boolean).length;
+    const coreBearishCount = [isBearishMACD, isBearishEMA, isStrongTrend, isBearishIchimoku, isBearishEntry].filter(Boolean).length;
+    if (coreBullishCount >= 2 && isValidBuyRSI) {
+      score += coreBullishCount;
+      scoreDetails.push(`coreBullishCount=${coreBullishCount}`);
+      if (rsi > 50 && rsi < 95) { score += 1.0; scoreDetails.push('rsi>50:+1.0'); }
+      if (price > boll.middle) { score += 1.5; scoreDetails.push('aboveBBMiddle:+1.5'); }
+      if (price > boll.lower) { score += 0.5; scoreDetails.push('aboveBBLower:+0.5'); }
+      if (stochastic.k > stochastic.d && stochastic.k < 80) { score += 1.0; scoreDetails.push('stochasticBullish:+1.0'); }
+      if (cci > 25 && cci < 200) { score += 0.5; scoreDetails.push('cci>25:+0.5'); }
+      if (price > sar) { score += 1.0; scoreDetails.push('aboveSAR:+1.0'); }
+      if (price > vwap) { score += 1.0; scoreDetails.push('aboveVWAP:+1.0'); }
+      if (obv > 0) { score += 1.0; scoreDetails.push('obv>0:+1.0'); }
+      if (volOsc > -10) { score += 0.5; scoreDetails.push('volOsc>-10:+0.5'); }
+    } else if (coreBearishCount >= 3 && isValidSellRSI) {
+      score -= coreBearishCount;
+      scoreDetails.push(`coreBearishCount=${coreBearishCount}`);
+      if (rsi < 45 && rsi > 10) { score -= 0.75; scoreDetails.push('rsi<45:-0.75'); }
+      if (price < boll.middle) { score -= 1.5; scoreDetails.push('belowBBMiddle:-1.5'); }
+      if (price < boll.upper) { score -= 0.5; scoreDetails.push('belowBBUpper:-0.5'); }
+      if (stochastic.k < stochastic.d && stochastic.k > 20) { score -= 1.0; scoreDetails.push('stochasticBearish:-1.0'); }
+      if (cci < -50 && cci > -200) { score -= 0.5; scoreDetails.push('cci<-50:-0.5'); }
+      if (price < sar) { score -= 1.0; scoreDetails.push('belowSAR:-1.0'); }
+      if (price < vwap) { score -= 1.0; scoreDetails.push('belowVWAP:-1.0'); }
+      if (obv < 0) { score -= 1.0; scoreDetails.push('obv<0:-1.0'); }
+      if (volOsc < -10) { score -= 0.5; scoreDetails.push('volOsc<-10:-0.5'); }
+    }
+    const pop = Math.min(100, Math.round((Math.abs(score) / 12) * 100));
+
+    // Signal
+    const signalType = score >= 4.5 ? "Strong Buy" :
+                       score >= 3 ? "Buy" :
+                       score <= -6 ? "Strong Sell" :
+                       score <= -4 ? "Sell" : "Neutral";
+
+    // TP & SL
+    let tp, sl;
+    if (signalType === "Strong Sell" || signalType === "Sell") {
+      tp = isValidSupport ? support : price * 0.99;
+      sl = isValidResistance ? resistance : price * 1.01;
+    } else {
+      tp = isValidResistance ? resistance : price * 1.01;
+      sl = isValidSupport ? support : price * 0.99;
+    }
+
+    // Leverage & Profit
+    const leverage = Math.min(10, Math.max(5, 5 + Math.floor(pop / 20) * (atr < price * 0.01 ? 1 : 0.5)));
+    const profitPct = (((tp - price) / price) * 100 * leverage).toFixed(2);
+
+    // Format MACD for JSON
+    const formattedMacdObj = {
+      macd: Number(macdObj.macd).toFixed(12),
+      signal: Number(macdObj.signal).toFixed(12)
+    };
+
+    // Debug logging
+    console.log(`Indicators for ${symbol}: rsi=${rsi.toFixed(2)}, macd=${formattedMacdObj.macd}, signal=${formattedMacdObj.signal}, ema20=${ema20.toFixed(8)}, ema50=${ema50.toFixed(8)}, signal=${signalType}, pop=${pop}%, coreBullishCount=${coreBullishCount}, coreBearishCount=${coreBearishCount}`);
+
+    return {
+      coin: symbol,
+      price,
+      tp: tp.toFixed(4),
+      sl: sl.toFixed(4),
+      leverage: leverage + "x",
+      pop,
+      rsi,
+      estimated_profit: profitPct + "%",
+      signal: signalType,
+      indicators: { rsi, macdObj: formattedMacdObj, ema20, ema50, boll, adx, stochastic, cci, sar, vwap, atr, ichimoku, volOsc }
+    };
+  }
+
+  function calcEMA(values, period) {
+    if (!values || values.length < period || !values.every(v => Number.isFinite(v) && v > 0)) {
+      console.warn(`calcEMA failed: period=${period}, length=${values.length}`);
+      return 0;
+    }
+    const k = 2 / (period + 1);
+    let ema = values.slice(0, period).reduce((a, b) => a + b) / period;
+    if (!Number.isFinite(ema) || ema <= 0) {
+      console.warn(`calcEMA invalid: ema=${ema}`);
+      return 0;
+    }
+    for (let i = period; i < values.length; i++) {
+      ema = values[i] * k + ema * (1 - k);
+      if (!Number.isFinite(ema) || ema <= 0) {
+        console.warn(`calcEMA invalid at ${i}: ema=${ema}, value=${values[i]}`);
+        return 0;
+      }
+    }
+    return ema;
+  }
+
+  function calcRSI(values, period) {
+    if (!values || values.length < period + 1 || !values.every(v => Number.isFinite(v))) {
+      console.warn(`calcRSI failed: period=${period}, length=${values.length}`);
+      return -1;
+    }
+    let gains = 0, losses = 0;
+    for (let i = 1; i <= period; i++) {
+      const diff = values[i] - values[i - 1];
+      if (diff >= 0) gains += diff; else losses += Math.abs(diff);
+    }
+    let avgGain = gains / period;
+    let avgLoss = losses / period;
+    for (let i = period + 1; i < values.length; i++) {
+      const diff = values[i] - values[i - 1];
+      avgGain = (avgGain * (period - 1) + Math.max(diff, 0)) / period;
+      avgLoss = (avgLoss * (period - 1) + Math.max(-diff, 0)) / period;
+    }
+    if (avgLoss === 0) return 100;
+    const rs = avgGain / avgLoss;
+    const rsi = 100 - (100 / (1 + rs));
+    return Number.isFinite(rsi) ? rsi : -1;
+  }
+
+  function calcMACD(values, fast = 12, slow = 26, signal = 9) {
+    if (values.length < slow) {
+      console.warn(`calcMACD failed: insufficient data, length=${values.length}, required=${slow}`);
+      return { macd: 0, signal: 0 };
+    }
+    const emaFast = calcEMA(values, fast);
+    const emaSlow = calcEMA(values, slow);
+    const macd = emaFast - emaSlow;
+    const signalLine = (macd + emaSlow) / 2;
+    if (!Number.isFinite(macd) || !Number.isFinite(signalLine)) {
+      console.warn(`calcMACD invalid: macd=${macd}, signal=${signalLine}`);
+      return { macd: 0, signal: 0 };
+    }
+    console.log(`calcMACD success for ${values.length} values: macd=${macd.toFixed(12)}, signal=${signalLine.toFixed(12)}`);
+    return { macd, signal: signalLine };
+  }
+
+  function calcBollinger(values, period, mult) {
+    if (!values || values.length < period || !values.every(v => Number.isFinite(v))) {
+      console.warn(`calcBollinger failed: period=${period}, length=${values.length}`);
+      return { upper: 0, middle: 0, lower: 0 };
+    }
+    const slice = values.slice(-period);
+    const mean = slice.reduce((a, b) => a + b) / period;
+    const variance = slice.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / period;
+    const stddev = Math.sqrt(variance);
+    return {
+      upper: Number.isFinite(mean + mult * stddev) ? mean + mult * stddev : 0,
+      middle: Number.isFinite(mean) ? mean : 0,
+      lower: Number.isFinite(mean - mult * stddev) ? mean - mult * stddev : 0
+    };
+  }
+
+  function calcATR(highs, lows, closes, period = 14) {
+    if (highs.length < period || lows.length < period || closes.length < period) return 0;
+    const trs = [];
+    for (let i = 1; i < highs.length; i++) {
+      if (!Number.isFinite(highs[i]) || !Number.isFinite(lows[i]) || !Number.isFinite(closes[i - 1])) continue;
+      const tr = Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1]));
+      trs.push(tr);
+    }
+    if (trs.length < period) return 0;
+    const atr = calcEMA(trs, period);
+    return Number.isFinite(atr) ? atr : 0;
+  }
+
+  function calcADX(highs, lows, closes, period) {
+    if (highs.length < period + 1) return 0;
+    let plusDM = 0, minusDM = 0, tr = 0;
+    for (let i = 1; i < highs.length; i++) {
+      const upMove = highs[i] - highs[i - 1];
+      const downMove = lows[i - 1] - lows[i];
+      plusDM += (upMove > downMove && upMove > 0) ? upMove : 0;
+      minusDM += (downMove > upMove && downMove > 0) ? downMove : 0;
+      tr += Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1]));
+    }
+    const plusDI = (plusDM / tr) * 100;
+    const minusDI = (minusDM / tr) * 100;
+    const dx = Math.abs(plusDI - minusDI) / (plusDI + minusDI) * 100;
+    return Number.isFinite(dx) ? dx : 0;
+  }
+
+  function calcStochastic(highs, lows, closes, kPeriod, dPeriod) {
+    const sliceHigh = highs.slice(-kPeriod);
+    const sliceLow = lows.slice(-kPeriod);
+    const highest = Math.max(...sliceHigh);
+    const lowest = Math.min(...sliceLow);
+    const k = ((closes.at(-1) - lowest) / (highest - lowest)) * 100;
+    const d = k;
+    return { k: Number.isFinite(k) ? k : 0, d: Number.isFinite(d) ? d : 0 };
+  }
+
+  function calcCCI(highs, lows, closes, period) {
+    if (highs.length < period) return 0;
+    const typical = highs.map((h, i) => (h + lows[i] + closes[i]) / 3);
+    const tpSlice = typical.slice(-period);
+    const mean = tpSlice.reduce((a, b) => a + b) / period;
+    const meanDev = tpSlice.reduce((a, b) => a + Math.abs(b - mean), 0) / period;
+    return meanDev === 0 ? 0 : (typical.at(-1) - mean) / (0.015 * meanDev);
+  }
+
+  function calcSAR(highs, lows, step, maxStep) {
+    if (highs.length < 2) return 0;
+    let sar = lows[0];
+    let ep = highs[0];
+    let af = step;
+    let uptrend = true;
+    for (let i = 1; i < highs.length; i++) {
+      sar = sar + af * (ep - sar);
+      if (uptrend) {
+        if (highs[i] > ep) { ep = highs[i]; af = Math.min(af + step, maxStep); }
+        if (lows[i] < sar) { uptrend = false; sar = ep; ep = lows[i]; af = step; }
+      } else {
+        if (lows[i] < ep) { ep = lows[i]; af = Math.min(af + step, maxStep); }
+        if (highs[i] > sar) { uptrend = true; sar = ep; ep = highs[i]; af = step; }
+      }
+    }
+    return Number.isFinite(sar) ? sar : 0;
+  }
+
+  function calcVWAP(highs, lows, closes, volumes) {
+    let cumPV = 0, cumVol = 0;
+    for (let i = 0; i < closes.length; i++) {
+      const typicalPrice = (highs[i] + lows[i] + closes[i]) / 3;
+      cumPV += typicalPrice * volumes[i];
+      cumVol += volumes[i];
+    }
+    return cumVol === 0 ? 0 : cumPV / cumVol;
+  }
+
+  function calcOBV(closes, volumes) {
+    let obv = 0;
+    for (let i = 1; i < closes.length; i++) {
+      if (closes[i] > closes[i - 1]) obv += volumes[i];
+      else if (closes[i] < closes[i - 1]) obv -= volumes[i];
+    }
+    return obv;
+  }
+
+  function calcIchimoku(closes, highs, lows, tenkanPeriod = 9, kijunPeriod = 26) {
+    if (closes.length < kijunPeriod) return { tenkan: 0, kijun: 0 };
+    const tenkanHigh = highs.slice(-tenkanPeriod);
+    const tenkanLow = lows.slice(-tenkanPeriod);
+    const kijunHigh = highs.slice(-kijunPeriod);
+    const kijunLow = lows.slice(-kijunPeriod);
+    const tenkan = (Math.max(...tenkanHigh) + Math.min(...tenkanLow)) / 2;
+    const kijun = (Math.max(...kijunHigh) + Math.min(...kijunLow)) / 2;
+    return { tenkan: Number.isFinite(tenkan) ? tenkan : 0, kijun: Number.isFinite(kijun) ? kijun : 0 };
+  }
+
+  function calcVolumeOscillator(volumes, shortPeriod = 5, longPeriod = 20) {
+    if (volumes.length < longPeriod) return 0;
+    const shortEMA = calcEMA(volumes, shortPeriod);
+    const longEMA = calcEMA(volumes, longPeriod);
+    return longEMA === 0 ? 0 : ((shortEMA - longEMA) / longEMA) * 100;
+  }
+
+  function updateDashboard(filteredResults, allResults) {
+    const sections = {
+      "Strong Buy": document.getElementById('strong-buy-body'),
+      "Strong Sell": document.getElementById('strong-sell-body')
+    };
+    Object.values(sections).forEach(body => body.innerHTML = '');
+
+    const sorted = { "Strong Buy": [], "Strong Sell": [] };
+    filteredResults.forEach(r => {
+      if (sorted[r.signal]) sorted[r.signal].push(r);
+    });
+
+    for (let key in sorted) {
+      sorted[key].sort((a, b) => parseFloat(b.estimated_profit) - parseFloat(a.estimated_profit));
+      sorted[key].forEach((r, index) => {
+        const popClass = r.pop >= 70 ? 'pop-high' : (r.pop >= 50 ? 'pop-medium' : 'pop-low');
+        const topClass = index < 3 ? (key.includes("Sell") ? "top-pick-sell" : "top-pick") : "";
+        const row = `<tr class="${topClass}">
+          <td>${r.coin.replace('USDT','')}</td>
+          <td>$${r.price.toFixed(4)}</td>
+          <td>${r.tp}</td>
+          <td>${r.sl}</td>
+          <td>${r.leverage}</td>
+          <td class="${popClass}">${r.pop}%</td>
+          <td>${r.rsi.toFixed(2)}</td>
+          <td class="bold">${r.estimated_profit}</td>
+        </tr>`;
+        sections[key].innerHTML += row;
+      });
+    }
+  }
+
+  function updateRawData(results) {
+    document.getElementById('raw-data').value = JSON.stringify(results, null, 2);
+  }
+
+  function startSpinner(show) {
+    document.getElementById('spinner').style.display = show ? 'inline-block' : 'none';
+    document.getElementById('refresh-btn').disabled = show;
+  }
+
+  function updateProgress(percent) {
+    document.getElementById('progress-bar').style.width = percent + "%";
+  }
+
+  function startCountdown(seconds) {
+    const countdownEl = document.getElementById('countdown');
+    let remaining = seconds;
+    countdownEl.textContent = formatTime(remaining);
+    countdownInterval = setInterval(() => {
+      remaining--;
+      countdownEl.textContent = formatTime(remaining);
+      if (remaining <= 0) clearInterval(countdownInterval);
+    }, 1000);
+  }
+
+  function formatTime(sec) {
+    const m = String(Math.floor(sec / 60)).padStart(2, '0');
+    const s = String(sec % 60).padStart(2, '0');
+    return `${m}:${s}`;
+  }
+
+  fetchData();
+</script>
+</body>
+</html>
