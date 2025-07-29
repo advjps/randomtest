@@ -143,7 +143,7 @@
     const lows5m = data5m.map(d => d.low);
     const volumes5m = data5m.map(d => d.volume);
     const closes1m = data1m.map(d => d.close);
-    const price = closes5m.at(-1);
+    const price = data5m[data5m.length - 1].close; // Current price from the latest 5m candle
 
     // Data validation
     const cleanCloses5m = closes5m.filter(v => Number.isFinite(v) && v > 0);
@@ -169,8 +169,7 @@
 
    // Ensure all data points are objects with 'close', 'high', 'low', 'volume' properties
     // (Your fetchBinanceData function already does this, but keeping `cleanClosesXm` for clarity where only closes are needed)
-    const price = data5m[data5m.length - 1].close; // Current price from the latest 5m candle
-
+     
     // --- Data Validation (KEEP THIS AS IS) ---
     const cleanCloses5m = data5m.map(d => d.close).filter(v => Number.isFinite(v) && v > 0);
     const cleanHighs5m = data5m.map(d => d.high).filter(v => Number.isFinite(v) && v > 0);
