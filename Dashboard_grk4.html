@@ -123,7 +123,7 @@
 
   async function fetchBinanceDataWithFallback(symbol, timeframe) {
   // Changed limit to 200 for more data for indicators
-  const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${timeframe}&limit=200`; // Updated
+  const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${timeframe}&limit=400`; // Updated
   try { return await fetchBinanceData(url); }
   catch (err) {
     const proxyUrl = `https://cors-anywhere.herokuapp.com/${url}`;
@@ -533,49 +533,50 @@ function getLastValidValue(arr) {
 
 // 1. EMA (Exponential Moving Average) - Returns an array of EMA values
 function calcEMA(values, period) {
-    const emaArray = [];
+    const emaArray = Array(values.length).fill(NaN); // Pre-fill array with NaNs of correct length
+
     if (!values || values.length < period) {
-        // Not enough data for initial SMA, fill entire array with NaN
-        return Array(values.length).fill(NaN); 
+        return emaArray; // Return all NaNs if not enough data
     }
 
     const k = 2 / (period + 1);
-    let ema = 0;
+    let ema = NaN; // Initialize EMA as NaN
 
-    // Initialize with SMA for the first 'period' values
-    let sum = 0;
-    let initialValidCount = 0;
+    // Try to get an initial EMA value by finding the first period's SMA or first valid value
+    let initialSum = 0;
+    let initialCount = 0;
     for (let i = 0; i < period; i++) {
         const val = values[i];
-        if (Number.isFinite(val) && val > 0) { // Only sum valid numbers
-            sum += val;
-            initialValidCount++;
+        if (Number.isFinite(val) && val > 0) {
+            initialSum += val;
+            initialCount++;
         }
-        emaArray.push(NaN); // Always push NaN for initial periods, actual EMA starts later
     }
 
-    // Only set initial EMA if enough valid data points for SMA
-    if (initialValidCount >= period) { // Ensure enough *valid* data for initial SMA
-        ema = sum / period;
-        emaArray[period - 1] = ema; // Store initial SMA as first EMA
-    } else {
-        // If initial SMA cannot be computed, then EMA cannot be computed from this point.
-        // The array will remain mostly NaN if data is insufficient
+    if (initialCount === period) { // If we have enough valid points for an initial SMA
+        ema = initialSum / period;
+        emaArray[period - 1] = ema; // Store initial SMA as first valid EMA
     }
+    // If not enough initial valid points, ema remains NaN and propagation will handle it
+
 
     for (let i = period; i < values.length; i++) {
         const val = values[i];
-        if (!Number.isFinite(val) || val <= 0 || isNaN(ema)) { // If current val is bad OR previous EMA was NaN
-            emaArray.push(NaN); 
-            ema = NaN; // Propagate NaN
+        
+        // If current value is not finite or previous EMA was NaN, propagate NaN
+        if (!Number.isFinite(val) || val <= 0 || isNaN(ema)) { 
+            emaArray[i] = NaN;
+            ema = NaN; // Ensure ema is NaN for next iteration as well
             continue; 
         }
+
         ema = (val * k) + (ema * (1 - k));
-        emaArray.push(ema);
+        emaArray[i] = ema;
     }
     return emaArray;
 }
-// 2. RSI (Relative Strength Index) - Returns an array of RSI values
+  
+  // 2. RSI (Relative Strength Index) - Returns an array of RSI values
 function calcRSI(values, period = 14) {
     const rsiArray = [];
     if (!values || values.length < period + 1) {
