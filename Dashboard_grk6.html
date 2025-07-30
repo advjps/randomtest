@@ -536,37 +536,37 @@ function getLastValidValue(arr) {
 
 // 1. EMA (Exponential Moving Average) - Returns an array of EMA values
 function calcEMA(values, period) {
-    const emaArray = Array(values.length).fill(NaN); // Pre-fill array with NaNs of correct length
+    const emaArray = Array(values.length).fill(NaN); // Pre-fill with NaN for full length
 
     if (!values || values.length < period) {
-        return emaArray; // Return all NaNs if not enough data
+        return emaArray; 
     }
 
     const k = 2 / (period + 1);
     let ema = NaN; // Initialize EMA as NaN
 
-    // Try to get an initial EMA value by finding the first period's SMA or first valid value
-    let initialSum = 0;
-    let initialCount = 0;
-    for (let i = 0; i < period; i++) {
-        const val = values[i];
-        if (Number.isFinite(val) && val > 0) {
-            initialSum += val;
-            initialCount++;
+    // Find the first index where enough *valid* data exists to start the EMA calculation
+    let firstValidIndex = -1;
+    for (let i = 0; i <= values.length - period; i++) {
+        const slice = values.slice(i, i + period);
+        if (slice.every(val => Number.isFinite(val) && val > 0)) {
+            firstValidIndex = i;
+            break;
         }
     }
 
-    if (initialCount === period) { // If we have enough valid points for an initial SMA
+    if (firstValidIndex !== -1) {
+        // Calculate the initial SMA for the first valid 'period' slice
+        let initialSum = values.slice(firstValidIndex, firstValidIndex + period).reduce((a, b) => a + b);
         ema = initialSum / period;
-        emaArray[period - 1] = ema; // Store initial SMA as first valid EMA
+        emaArray[firstValidIndex + period - 1] = ema; // Store initial SMA as first valid EMA value
     }
-    // If not enough initial valid points, ema remains NaN and propagation will handle it
 
-
-    for (let i = period; i < values.length; i++) {
+    // Continue EMA calculation from the point it became valid
+    for (let i = (firstValidIndex !== -1 ? firstValidIndex + period : period); i < values.length; i++) {
         const val = values[i];
         
-        // If current value is not finite or previous EMA was NaN, propagate NaN
+        // If current value is not finite OR previous EMA was NaN, propagate NaN
         if (!Number.isFinite(val) || val <= 0 || isNaN(ema)) { 
             emaArray[i] = NaN;
             ema = NaN; // Ensure ema is NaN for next iteration as well
@@ -577,8 +577,7 @@ function calcEMA(values, period) {
         emaArray[i] = ema;
     }
     return emaArray;
-}
-  
+}  
   // 2. RSI (Relative Strength Index) - Returns an array of RSI values
 function calcRSI(values, period = 14) {
     const rsiArray = [];
@@ -643,75 +642,47 @@ function calcRSI(values, period = 14) {
 // 3. MACD (Moving Average Convergence Divergence) - Returns object with arrays
 function calcMACD(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
     const macdResult = {
-        macdLine: [],
-        signalLine: [],
-        histogram: [],
+        macdLine: Array(values.length).fill(NaN),
+        signalLine: Array(values.length).fill(NaN),
+        histogram: Array(values.length).fill(NaN),
         latest: { macd: NaN, signal: NaN, histogram: NaN }
     };
 
     if (!values || values.length < slowPeriod) {
-        // Fill all arrays with NaN if insufficient data
-        macdResult.macdLine = Array(values.length).fill(NaN);
-        macdResult.signalLine = Array(values.length).fill(NaN);
-        macdResult.histogram = Array(values.length).fill(NaN);
         return macdResult;
     }
 
-    // 1. Calculate Fast EMA (array)
     const fastEMA_values = calcEMA(values, fastPeriod);
-
-    // 2. Calculate Slow EMA (array)
     const slowEMA_values = calcEMA(values, slowPeriod);
 
-    // 3. Calculate MACD Line (Fast EMA - Slow EMA)
-    const tempMacdLine = [];
-    // MACD line is valid where both fastEMA and slowEMA are valid
-    // This typically means from Math.max(fastPeriod, slowPeriod) - 1 index onwards
-    const commonStartIdx = Math.max(fastPeriod, slowPeriod) - 1; 
-
+    // Calculate MACD Line
     for (let i = 0; i < values.length; i++) {
-        if (i < commonStartIdx || isNaN(fastEMA_values[i]) || isNaN(slowEMA_values[i])) {
-            tempMacdLine.push(NaN);
+        if (Number.isFinite(fastEMA_values[i]) && Number.isFinite(slowEMA_values[i])) {
+            macdResult.macdLine[i] = fastEMA_values[i] - slowEMA_values[i];
         } else {
-            tempMacdLine.push(fastEMA_values[i] - slowEMA_values[i]);
+            macdResult.macdLine[i] = NaN;
         }
     }
-    macdResult.macdLine = tempMacdLine;
 
-    // 4. Calculate Signal Line (EMA of the MACD Line)
-    // Create a temporary array of objects from macdLine values for calcEMA
-    const macdLineForEMA = tempMacdLine.map(val => ({ close: val }));
+    // Calculate Signal Line (EMA of the MACD Line)
+    const macdLineForEMA = macdResult.macdLine.map(val => ({ close: val }));
     const tempSignalLineValues = calcEMA(macdLineForEMA, signalPeriod);
 
-    // Align signalLine array to match original data length
-    // The signal line's valid values start after `signalPeriod` periods *of the MACD line*.
-    // So, it's relative to where `tempMacdLine` first becomes valid.
-    const signalLineStartIndex = (tempMacdLine.findIndex(val => Number.isFinite(val)) !== -1) ? 
-                                  tempMacdLine.findIndex(val => Number.isFinite(val)) + signalPeriod - 1 : 
-                                  values.length; // If MACD line is all NaN, signal line is all NaN
-
-    macdResult.signalLine = Array(values.length).fill(NaN); // Initialize with NaNs
-    
-    // Copy valid signal line values from tempSignalLineValues to macdResult.signalLine
-    let srcIdx = 0; // Index for tempSignalLineValues
+    // Copy valid signal line values to macdResult.signalLine, respecting NaNs
     for(let i = 0; i < values.length; i++) {
-        if (i >= signalLineStartIndex && srcIdx < tempSignalLineValues.length) {
-            if (Number.isFinite(tempSignalLineValues[srcIdx])) {
-                macdResult.signalLine[i] = tempSignalLineValues[srcIdx];
-                srcIdx++;
-            } else {
-                macdResult.signalLine[i] = NaN; // Propagate NaN
-                srcIdx++; // Still increment source index to move past this NaN
-            }
+        if (Number.isFinite(tempSignalLineValues[i])) {
+            macdResult.signalLine[i] = tempSignalLineValues[i];
+        } else {
+            macdResult.signalLine[i] = NaN;
         }
     }
-
-    // 5. Calculate MACD Histogram
+    
+    // Calculate MACD Histogram
     for (let i = 0; i < values.length; i++) {
-        if (isNaN(macdResult.macdLine[i]) || isNaN(macdResult.signalLine[i])) {
-            macdResult.histogram.push(NaN);
+        if (Number.isFinite(macdResult.macdLine[i]) && Number.isFinite(macdResult.signalLine[i])) {
+            macdResult.histogram[i] = macdResult.macdLine[i] - macdResult.signalLine[i];
         } else {
-            macdResult.histogram.push(macdResult.macdLine[i] - macdResult.signalLine[i]);
+            macdResult.histogram[i] = NaN;
         }
     }
 
@@ -720,71 +691,54 @@ function calcMACD(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
     macdResult.latest.histogram = getLastValidValue(macdResult.histogram);
 
     return macdResult;
-}
+}  
   
   // 4. Stochastic Oscillator - Returns object with arrays for %K and %D
 function calcStochastic(highs, lows, closes, kPeriod = 14, dPeriod = 3) {
     const stochasticResult = {
-        kLine: [],
-        dLine: [],
+        kLine: Array(closes.length).fill(NaN), // Pre-fill
+        dLine: Array(closes.length).fill(NaN), // Pre-fill
         latest: { k: NaN, d: NaN }
     };
     if (!highs || !lows || !closes || highs.length < kPeriod || lows.length < kPeriod || closes.length < kPeriod) {
-        // Fill all arrays with NaN if insufficient data
-        stochasticResult.kLine = Array(closes.length).fill(NaN);
-        stochasticResult.dLine = Array(closes.length).fill(NaN);
         return stochasticResult;
     }
 
-    const kValues = [];
-    // Initialize kLine with NaNs for initial periods
-    for(let i = 0; i < kPeriod - 1; i++) {
-        stochasticResult.kLine.push(NaN);
-        kValues.push(NaN); // Also add to kValues which will be EMA source
-    }
-
+    // Calculate K line
     for (let i = kPeriod - 1; i < closes.length; i++) {
         const sliceHigh = highs.slice(i - kPeriod + 1, i + 1);
         const sliceLow = lows.slice(i - kPeriod + 1, i + 1);
         const currentClose = closes[i];
 
-        const highest = Math.max(...sliceHigh);
-        const lowest = Math.min(...sliceLow);
+        const highest = Math.max(...sliceHigh.filter(v => Number.isFinite(v))); // Filter NaNs from slice
+        const lowest = Math.min(...sliceLow.filter(v => Number.isFinite(v)));   // Filter NaNs from slice
 
         let k = NaN;
         if (Number.isFinite(currentClose) && Number.isFinite(highest) && Number.isFinite(lowest) && (highest - lowest !== 0)) { 
             k = ((currentClose - lowest) / (highest - lowest)) * 100;
         }
-        stochasticResult.kLine.push(Number.isFinite(k) ? k : NaN); // Push to final kLine array directly
-        kValues.push(Number.isFinite(k) ? k : NaN); // Keep this for D line EMA calculation
+        stochasticResult.kLine[i] = Number.isFinite(k) ? k : NaN;
     }
 
-    // Calculate D line (SMA of K line)
-    const kLineForEMA = kValues.map(val => ({ close: val }));
+    // Calculate D line (EMA/SMA of K line)
+    const kLineForEMA = stochasticResult.kLine.map(val => ({ close: val })); // Use the already calculated kLine array
     const dValues = calcEMA(kLineForEMA, dPeriod); 
 
-    // Align dLine array to match original data length
-    stochasticResult.dLine = Array(closes.length).fill(NaN);
-    const firstValidKLineIdx = stochasticResult.kLine.findIndex(val => Number.isFinite(val));
-    
-    if (firstValidKLineIdx !== -1 && dValues.length > 0) {
-        const dLineActualStartIdx = firstValidKLineIdx + (dPeriod - 1);
-        let srcIdx = dValues.findIndex(val => Number.isFinite(val));
-        for(let i = dLineActualStartIdx; i < closes.length; i++) {
-            if (srcIdx < dValues.length && Number.isFinite(dValues[srcIdx])) {
-                stochasticResult.dLine[i] = dValues[srcIdx];
-                srcIdx++;
-            } else {
-                stochasticResult.dLine[i] = NaN;
-            }
+    // Copy valid dLine values to result, respecting NaNs
+    for(let i = 0; i < closes.length; i++) {
+        if (Number.isFinite(dValues[i])) {
+            stochasticResult.dLine[i] = dValues[i];
+        } else {
+            stochasticResult.dLine[i] = NaN;
         }
     }
-
+    
     stochasticResult.latest.k = getLastValidValue(stochasticResult.kLine);
     stochasticResult.latest.d = getLastValidValue(stochasticResult.dLine);
 
     return stochasticResult;
 }
+  
 // 5. OBV (On-Balance Volume) - Returns an array of OBV values
 function calcOBV(closes, volumes) {
     const obvArray = [];
@@ -909,7 +863,7 @@ function checkForDivergence(priceHighs, priceLows, indicatorValues, indicatorHig
   }
 
   function calcATR(highs, lows, closes, period = 14) {
-    if (!highs || !lows || !closes || highs.length < period +1 || lows.length < period +1 || closes.length < period +1) {
+    if (!highs || !lows || !closes || highs.length < period + 1 || lows.length < period + 1 || closes.length < period + 1) {
         return 0; // Return 0 if not enough data
     }
     const trs = [];
@@ -927,12 +881,14 @@ function checkForDivergence(priceHighs, priceLows, indicatorValues, indicatorHig
       trs.push(tr);
     }
     
-    // Now use getLastValidValue on the array returned by calcEMA
-    const atrArray = calcEMA(trs, period); // calcEMA now returns an array
+    // calcEMA returns an array. We need the last valid value.
+    const atrArray = calcEMA(trs, period); 
     const atr = getLastValidValue(atrArray);
 
-    return Number.isFinite(atr) ? atr : 0; // Return 0 if ATR is NaN
+    // Return 0 if ATR is NaN or non-positive, to avoid issues in TP/SL calculation
+    return Number.isFinite(atr) && atr > 0 ? atr : 0; 
   }
+  
   function calcADX(highs, lows, closes, period) {
     if (highs.length < period + 1) return 0;
     let plusDM = 0, minusDM = 0, tr = 0;
