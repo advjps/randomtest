@@ -451,9 +451,10 @@
 
     // --- Final Return Object ---
     // Format MACD for JSON (using .latest properties now)
+    
     const formattedMacdObj = {
       macd: Number.isFinite(macdObj5m.latest.macd) ? macdObj5m.latest.macd.toFixed(12) : 'NaN',
-      signal: Number.isFinite(macdObj5m.latest.signal) ? macdObj5m.latest.signal.toFixed(12) : 'NaN',
+      signal: Number.isFinite(macdObj5m.latest.signal) ? macdObj5m.latest.signal.toFixed(12) : 'NaN', // <-- This is key
       histogram: Number.isFinite(macdObj5m.latest.histogram) ? macdObj5m.latest.histogram.toFixed(12) : 'NaN'
     };
 
@@ -534,39 +535,76 @@ function getLastValidValue(arr) {
 // Helper function to get the last valid value from an array (KEEP THIS AS IS)
 // function getLastValidValue(arr) { ... }
 
+// Helper function to get the last valid value from an array (KEEP THIS AS IS)
+// function getLastValidValue(arr) { ... }
+
 // 1. EMA (Exponential Moving Average) - Returns an array of EMA values
 function calcEMA(values, period) {
-    const emaArray = Array(values.length).fill(NaN); // Pre-fill with NaN for full length
+    // Initialize emaArray with NaN for consistency, it will be filled later
+    const emaArray = Array(values.length).fill(NaN); 
 
-    if (!values || values.length < period) {
+    if (!values || values.length === 0) {
+        // console.log(`calcEMA: Input values array is empty for period ${period}. Returning NaNs.`);
+        return emaArray; 
+    }
+    if (values.length < period) {
+        // console.log(`calcEMA: Insufficient data for period ${period}. Length: ${values.length}. Returning NaNs.`);
         return emaArray; 
     }
 
     const k = 2 / (period + 1);
-    let ema = NaN; // Initialize EMA as NaN
+    let ema = NaN; // Current EMA value, initialized to NaN
 
-    // Find the first index where enough *valid* data exists to start the EMA calculation
-    let firstValidIndex = -1;
-    for (let i = 0; i <= values.length - period; i++) {
-        const slice = values.slice(i, i + period);
-        if (slice.every(val => Number.isFinite(val) && val > 0)) {
-            firstValidIndex = i;
-            break;
+    // --- Phase 1: Try to initialize EMA ---
+    // Option A: Calculate initial SMA for the first 'period' values if all are finite and positive.
+    let sumPeriod = 0;
+    let countPeriod = 0;
+    for (let i = 0; i < period; i++) {
+        if (Number.isFinite(values[i]) && values[i] > 0) {
+            sumPeriod += values[i];
+            countPeriod++;
+        } else {
+            break; // If a non-finite or non-positive value is encountered, stop SMA attempt
         }
     }
 
-    if (firstValidIndex !== -1) {
-        // Calculate the initial SMA for the first valid 'period' slice
-        let initialSum = values.slice(firstValidIndex, firstValidIndex + period).reduce((a, b) => a + b);
-        ema = initialSum / period;
-        emaArray[firstValidIndex + period - 1] = ema; // Store initial SMA as first valid EMA value
+    if (countPeriod === period) { // All values in the first period were clean, use SMA
+        ema = sumPeriod / period;
+        emaArray[period - 1] = ema;
+    } else {
+        // Option B: If initial SMA failed, find the first available valid value after 'period'
+        // and use it as a "kickstart" for the EMA.
+        for(let i = period; i < values.length; i++) {
+            if (Number.isFinite(values[i]) && values[i] > 0) {
+                ema = values[i]; // Kickstart EMA with this first valid value
+                emaArray[i] = ema; // Store it
+                break;
+            }
+        }
     }
 
-    // Continue EMA calculation from the point it became valid
-    for (let i = (firstValidIndex !== -1 ? firstValidIndex + period : period); i < values.length; i++) {
+    // --- Phase 2: Continue EMA calculation ---
+    // If EMA was never initialized to a finite number (e.g., all values are NaN), nothing to do.
+    if (!Number.isFinite(ema)) {
+        // console.warn(`calcEMA: Period ${period} - EMA could not be initialized from any value. Returning all NaNs.`);
+        return emaArray; 
+    }
+
+    // Loop from the first point where EMA was successfully calculated
+    // The starting index for the loop needs to be carefully determined based on how ema was initialized
+    let startIndex;
+    const lastValidInitialEmaIdx = emaArray.findIndex(val => Number.isFinite(val));
+    if (lastValidInitialEmaIdx !== -1) {
+        startIndex = lastValidInitialEmaIdx + 1;
+    } else {
+        startIndex = period; // Fallback, should ideally not be hit if ema was initialized
+    }
+
+
+    for (let i = startIndex; i < values.length; i++) {
         const val = values[i];
         
-        // If current value is not finite OR previous EMA was NaN, propagate NaN
+        // Propagate NaN if current value is invalid OR previous EMA was NaN
         if (!Number.isFinite(val) || val <= 0 || isNaN(ema)) { 
             emaArray[i] = NaN;
             ema = NaN; // Ensure ema is NaN for next iteration as well
@@ -577,7 +615,8 @@ function calcEMA(values, period) {
         emaArray[i] = ema;
     }
     return emaArray;
-}  
+}
+  
   // 2. RSI (Relative Strength Index) - Returns an array of RSI values
 function calcRSI(values, period = 14) {
     const rsiArray = [];
@@ -641,6 +680,7 @@ function calcRSI(values, period = 14) {
 }
 // 3. MACD (Moving Average Convergence Divergence) - Returns object with arrays
 function calcMACD(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
+    // Pre-fill arrays with NaN for correct length from the start
     const macdResult = {
         macdLine: Array(values.length).fill(NaN),
         signalLine: Array(values.length).fill(NaN),
@@ -649,13 +689,18 @@ function calcMACD(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
     };
 
     if (!values || values.length < slowPeriod) {
+        // console.log(`calcMACD: Insufficient input values for MACD (${values ? values.length : 0} < ${slowPeriod}).`);
         return macdResult;
     }
+    // console.log(`calcMACD: Calculating for ${values.length} values.`);
 
     const fastEMA_values = calcEMA(values, fastPeriod);
     const slowEMA_values = calcEMA(values, slowPeriod);
+    // console.log(`calcMACD: Fast EMA (last 5): ${fastEMA_values.slice(-5)}`);
+    // console.log(`calcMACD: Slow EMA (last 5): ${slowEMA_values.slice(-5)}`);
 
-    // Calculate MACD Line
+
+    // Calculate MACD Line (Fast EMA - Slow EMA)
     for (let i = 0; i < values.length; i++) {
         if (Number.isFinite(fastEMA_values[i]) && Number.isFinite(slowEMA_values[i])) {
             macdResult.macdLine[i] = fastEMA_values[i] - slowEMA_values[i];
@@ -663,8 +708,10 @@ function calcMACD(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
             macdResult.macdLine[i] = NaN;
         }
     }
+    // console.log(`calcMACD: MACD Line (last 5): ${macdResult.macdLine.slice(-5)}`);
 
     // Calculate Signal Line (EMA of the MACD Line)
+    // Pass MACD Line as data for EMA calculation
     const macdLineForEMA = macdResult.macdLine.map(val => ({ close: val }));
     const tempSignalLineValues = calcEMA(macdLineForEMA, signalPeriod);
 
@@ -676,7 +723,8 @@ function calcMACD(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
             macdResult.signalLine[i] = NaN;
         }
     }
-    
+    // console.log(`calcMACD: Signal Line (aligned, last 5): ${macdResult.signalLine.slice(-5)}`);
+
     // Calculate MACD Histogram
     for (let i = 0; i < values.length; i++) {
         if (Number.isFinite(macdResult.macdLine[i]) && Number.isFinite(macdResult.signalLine[i])) {
@@ -685,13 +733,14 @@ function calcMACD(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
             macdResult.histogram[i] = NaN;
         }
     }
-
+    
     macdResult.latest.macd = getLastValidValue(macdResult.macdLine);
     macdResult.latest.signal = getLastValidValue(macdResult.signalLine);
     macdResult.latest.histogram = getLastValidValue(macdResult.histogram);
+    // console.log(`calcMACD: Final Latest MACD: {macd: ${macdResult.latest.macd}, signal: ${macdResult.latest.signal}, hist: ${macdResult.latest.histogram}}`);
 
     return macdResult;
-}  
+} 
   
   // 4. Stochastic Oscillator - Returns object with arrays for %K and %D
 function calcStochastic(highs, lows, closes, kPeriod = 14, dPeriod = 3) {
@@ -701,17 +750,25 @@ function calcStochastic(highs, lows, closes, kPeriod = 14, dPeriod = 3) {
         latest: { k: NaN, d: NaN }
     };
     if (!highs || !lows || !closes || highs.length < kPeriod || lows.length < kPeriod || closes.length < kPeriod) {
+        // console.log(`calcStochastic: Insufficient input data. Highs: ${highs ? highs.length : 0}, Lows: ${lows ? lows.length : 0}, Closes: ${closes ? closes.length : 0}. Required: ${kPeriod}`);
         return stochasticResult;
     }
+    // console.log(`calcStochastic: Calculating for ${closes.length} values.`);
 
     // Calculate K line
     for (let i = kPeriod - 1; i < closes.length; i++) {
-        const sliceHigh = highs.slice(i - kPeriod + 1, i + 1);
-        const sliceLow = lows.slice(i - kPeriod + 1, i + 1);
+        const sliceHigh = highs.slice(i - kPeriod + 1, i + 1).filter(v => Number.isFinite(v)); // Filter NaNs from slice
+        const sliceLow = lows.slice(i - kPeriod + 1, i + 1).filter(v => Number.isFinite(v));   // Filter NaNs from slice
         const currentClose = closes[i];
 
-        const highest = Math.max(...sliceHigh.filter(v => Number.isFinite(v))); // Filter NaNs from slice
-        const lowest = Math.min(...sliceLow.filter(v => Number.isFinite(v)));   // Filter NaNs from slice
+        // Ensure slices are not empty after filtering and highest/lowest can be calculated
+        if (sliceHigh.length === 0 || sliceLow.length === 0 || !Number.isFinite(currentClose)) {
+            stochasticResult.kLine[i] = NaN;
+            continue;
+        }
+
+        const highest = Math.max(...sliceHigh); 
+        const lowest = Math.min(...sliceLow);   
 
         let k = NaN;
         if (Number.isFinite(currentClose) && Number.isFinite(highest) && Number.isFinite(lowest) && (highest - lowest !== 0)) { 
@@ -719,10 +776,13 @@ function calcStochastic(highs, lows, closes, kPeriod = 14, dPeriod = 3) {
         }
         stochasticResult.kLine[i] = Number.isFinite(k) ? k : NaN;
     }
+    // console.log(`calcStochastic: K Line (last 5): ${stochasticResult.kLine.slice(-5)}`);
 
     // Calculate D line (EMA/SMA of K line)
     const kLineForEMA = stochasticResult.kLine.map(val => ({ close: val })); // Use the already calculated kLine array
     const dValues = calcEMA(kLineForEMA, dPeriod); 
+    // console.log(`calcStochastic: D Line (temp values, last 5): ${dValues.slice(-5)}`);
+
 
     // Copy valid dLine values to result, respecting NaNs
     for(let i = 0; i < closes.length; i++) {
@@ -732,9 +792,11 @@ function calcStochastic(highs, lows, closes, kPeriod = 14, dPeriod = 3) {
             stochasticResult.dLine[i] = NaN;
         }
     }
+    // console.log(`calcStochastic: D Line (aligned, last 5): ${stochasticResult.dLine.slice(-5)}`);
     
     stochasticResult.latest.k = getLastValidValue(stochasticResult.kLine);
     stochasticResult.latest.d = getLastValidValue(stochasticResult.dLine);
+    // console.log(`calcStochastic: Final Latest Stoch: {k: ${stochasticResult.latest.k}, d: ${stochasticResult.latest.d}}`);
 
     return stochasticResult;
 }
@@ -864,8 +926,11 @@ function checkForDivergence(priceHighs, priceLows, indicatorValues, indicatorHig
 
   function calcATR(highs, lows, closes, period = 14) {
     if (!highs || !lows || !closes || highs.length < period + 1 || lows.length < period + 1 || closes.length < period + 1) {
-        return 0; // Return 0 if not enough data
+        // console.log(`calcATR: Insufficient input data. Highs: ${highs ? highs.length : 0}, Lows: ${lows ? lows.length : 0}, Closes: ${closes ? closes.length : 0}. Required: ${period + 1}`);
+        return NaN; // Return NaN to propagate problem clearly
     }
+    // console.log(`calcATR: Calculating for ${highs.length} values.`);
+
     const trs = [];
     for (let i = 1; i < highs.length; i++) {
       const h = highs[i];
@@ -880,13 +945,15 @@ function checkForDivergence(priceHighs, priceLows, indicatorValues, indicatorHig
       const tr = Math.max(h - l, Math.abs(h - prevC), Math.abs(l - prevC));
       trs.push(tr);
     }
-    
-    // calcEMA returns an array. We need the last valid value.
-    const atrArray = calcEMA(trs, period); 
-    const atr = getLastValidValue(atrArray);
+    // console.log(`calcATR: TRs array length: ${trs.length}, last 5: ${trs.slice(-5)}`);
 
-    // Return 0 if ATR is NaN or non-positive, to avoid issues in TP/SL calculation
-    return Number.isFinite(atr) && atr > 0 ? atr : 0; 
+    const atrArray = calcEMA(trs, period); // calcEMA now returns an array
+    const atr = getLastValidValue(atrArray);
+    // console.log(`calcATR: ATR Array (last 5): ${atrArray.slice(-5)}`);
+    // console.log(`calcATR: Final Latest ATR: ${atr}`);
+
+    // Return NaN if ATR is not finite or non-positive. `analyzeData`'s `effectiveATR` will handle fallback.
+    return Number.isFinite(atr) && atr > 0 ? atr : NaN; 
   }
   
   function calcADX(highs, lows, closes, period) {
