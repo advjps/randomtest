@@ -122,14 +122,14 @@
   }
 
   async function fetchBinanceDataWithFallback(symbol, timeframe) {
-    const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${timeframe}&limit=100`;
-    try { return await fetchBinanceData(url); }
-    catch (err) {
-      const proxyUrl = `https://cors-anywhere.herokuapp.com/${url}`;
-      return await fetchBinanceData(proxyUrl);
-    }
+  // Changed limit to 200 for more data for indicators
+  const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${timeframe}&limit=200`; // Updated
+  try { return await fetchBinanceData(url); }
+  catch (err) {
+    const proxyUrl = `https://cors-anywhere.herokuapp.com/${url}`;
+    return await fetchBinanceData(proxyUrl);
   }
-
+}
   async function fetchBinanceData(url) {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -139,7 +139,11 @@
 
   function analyzeData(symbol, data5m, data1m) {
     // --- Data Extraction and Cleaning ---
-    // Extract raw values from the fetched kline objects
+    // Safely get the current price from the latest 5m candle
+    const currentPrice = data5m[data5m.length - 1]?.close; 
+
+    // Extract raw values from the fetched kline objects and filter for validity
+    // Ensuring these are declared at the very top of the function
     const rawCloses5m = data5m.map(d => d.close);
     const rawHighs5m = data5m.map(d => d.high);
     const rawLows5m = data5m.map(d => d.low);
@@ -150,31 +154,18 @@
     const rawLows1m = data1m.map(d => d.low);
     const rawVolumes1m = data1m.map(d => d.volume);
 
-    const currentPrice = data5m[data5m.length - 1]?.close; // Current price from the latest 5m candle. Use optional chaining.
-
-    // Filter raw data to ensure all values are finite numbers and positive (for prices/volume)
-    // These 'clean' arrays are used by indicator functions
-    const cleanCloses5m = rawCloses5m.filter(v => Number.isFinite(v) && v > 0);
-    const cleanHighs5m = rawHighs5m.filter(v => Number.isFinite(v) && v > 0);
-    const cleanLows5m = rawLows5m.filter(v => Number.isFinite(v) && v > 0);
-    const cleanVolumes5m = rawVolumes5m.filter(v => Number.isFinite(v) && v >= 0);
-
-    const cleanCloses1m = rawCloses1m.filter(v => Number.isFinite(v) && v > 0);
-    const cleanHighs1m = rawHighs1m.filter(v => Number.isFinite(v) && v > 0);
-    const cleanLows1m = rawLows1m.filter(v => Number.isFinite(v) && v > 0);
-    const cleanVolumes1m = rawVolumes1m.filter(v => Number.isFinite(v) && v >= 0);
-
     // --- Data Sufficiency Check ---
-    // Minimum data required for the longest period indicators (e.g., EMA50, MACD, etc.)
-    const minDataRequired5m = 50; // EMA50 needs 50, Bollinger 20. Max for your 5m indicators
-    const minDataRequired1m = 26; // For 1m MACD (26-period slow EMA needs at least 26 candles)
+    // Minimum data required for the longest period indicators
+    // (e.g., EMA50 needs 50, MACD's slow EMA needs 26, its signal line needs 9 more)
+    const minDataRequired5m = 50; 
+    const minDataRequired1m = 26; // MACD (12, 26, 9) on 1m chart needs at least 26 candles
 
+    // Check if raw data arrays have enough length and current price is valid
     if (!currentPrice || 
-        rawCloses5m.length < minDataRequired5m || rawCloses1m.length < minDataRequired1m ||
-        cleanCloses5m.length < minDataRequired5m || cleanHighs5m.length < minDataRequired5m || cleanLows5m.length < minDataRequired5m || cleanVolumes5m.length < minDataRequired5m ||
-        cleanCloses1m.length < minDataRequired1m || cleanHighs1m.length < minDataRequired1m || cleanLows1m.length < minDataRequired1m || cleanVolumes1m.length < minDataRequired1m) {
+        rawCloses5m.length < minDataRequired5m || rawHighs5m.length < minDataRequired5m || rawLows5m.length < minDataRequired5m || rawVolumes5m.length < minDataRequired5m ||
+        rawCloses1m.length < minDataRequired1m || rawHighs1m.length < minDataRequired1m || rawLows1m.length < minDataRequired1m || rawVolumes1m.length < minDataRequired1m) {
 
-      console.warn(`Insufficient CLEAN or RAW data for ${symbol}. 5m length (raw/clean): ${rawCloses5m.length}/${cleanCloses5m.length}, 1m length (raw/clean): ${rawCloses1m.length}/${cleanCloses1m.length}`);
+      console.warn(`Insufficient raw data for ${symbol}. 5m length: ${rawCloses5m.length}, 1m length: ${rawCloses1m.length}. Required: 5m>${minDataRequired5m}, 1m>${minDataRequired1m}`);
       return {
         coin: symbol,
         price: currentPrice || 0,
@@ -189,34 +180,37 @@
       };
     }
 
-    // --- Indicator Calculations (using updated functions) ---
+    // --- Indicator Calculations (using your original indicator functions if not overridden, and my corrected ones) ---
+    // All indicator functions now receive the raw arrays directly. They are responsible for their own internal `Number.isFinite` checks.
+
     // 5-minute indicators
-    const rsiArray5m = calcRSI(cleanCloses5m, 14);
-    const macdObj5m = calcMACD(cleanCloses5m, 12, 26, 9);
-    const ema5_5m_array = calcEMA(cleanCloses5m, 5);
-    const ema13_5m_array = calcEMA(cleanCloses5m, 13);
-    const ema21_5m_array = calcEMA(cleanCloses5m, 21);
-    const ema50_5m_array = calcEMA(cleanCloses5m, 50); // For longer term 5m trend
-    const boll5m = calcBollinger(cleanCloses5m, 20, 2); // Your existing function is fine, still returns single obj
-    const atr5m = calcATR(cleanHighs5m, cleanLows5m, cleanCloses5m, 14); // Your existing function
-    const adx5m = calcADX(cleanHighs5m, cleanLows5m, cleanCloses5m, 14); // Your existing function
-    const stochasticObj5m = calcStochastic(cleanHighs5m, cleanLows5m, cleanCloses5m, 14, 3);
-    const cci5m = calcCCI(cleanHighs5m, cleanLows5m, cleanCloses5m, 20); // Your existing function
-    const sar5m = calcSAR(cleanHighs5m, cleanLows5m, 0.02, 0.2); // Your existing function
-    const vwap5m = calcVWAP(cleanHighs5m, cleanLows5m, cleanCloses5m, cleanVolumes5m); // Your existing function
-    const obvArray5m = calcOBV(cleanCloses5m, cleanVolumes5m);
-    const ichimoku5m = calcIchimoku(cleanCloses5m, cleanHighs5m, cleanLows5m, 9, 26); // Your existing function
-    const volOsc5m = calcVolumeOscillator(cleanVolumes5m, 5, 20); // Your existing function
+    const rsiArray5m = calcRSI(rawCloses5m, 14);
+    const macdObj5m = calcMACD(rawCloses5m, 12, 26, 9);
+    const ema5_5m_array = calcEMA(rawCloses5m, 5);
+    const ema13_5m_array = calcEMA(rawCloses5m, 13);
+    const ema21_5m_array = calcEMA(rawCloses5m, 21);
+    const ema50_5m_array = calcEMA(rawCloses5m, 50); 
+    const boll5m = calcBollinger(rawCloses5m, 20, 2); 
+    const atr5m = calcATR(rawHighs5m, rawLows5m, rawCloses5m, 14); 
+    const adx5m = calcADX(rawHighs5m, rawLows5m, rawCloses5m, 14); 
+    const stochasticObj5m = calcStochastic(rawHighs5m, rawLows5m, rawCloses5m, 14, 3);
+    const cci5m = calcCCI(rawHighs5m, rawLows5m, rawCloses5m, 20); 
+    const sar5m = calcSAR(rawHighs5m, rawLows5m, 0.02, 0.2); 
+    const vwap5m = calcVWAP(rawHighs5m, rawLows5m, rawCloses5m, rawVolumes5m); 
+    const obvArray5m = calcOBV(rawCloses5m, rawVolumes5m);
+    const ichimoku5m = calcIchimoku(rawCloses5m, rawHighs5m, rawLows5m, 9, 26); 
+    const volOsc5m = calcVolumeOscillator(rawVolumes5m, 5, 20); 
 
     // 1-minute indicators (for entry confirmation)
-    const ema5_1m_array = calcEMA(cleanCloses1m, 5);
-    const ema13_1m_array = calcEMA(cleanCloses1m, 13);
-    const ema21_1m_array = calcEMA(cleanCloses1m, 21);
-    const rsiArray1m = calcRSI(cleanCloses1m, 14);
-    const macdObj1m = calcMACD(cleanCloses1m, 12, 26, 9);
-    const obvArray1m = calcOBV(cleanCloses1m, cleanVolumes1m);
+    const ema5_1m_array = calcEMA(rawCloses1m, 5);
+    const ema13_1m_array = calcEMA(rawCloses1m, 13);
+    const ema21_1m_array = calcEMA(rawCloses1m, 21);
+    const rsiArray1m = calcRSI(rawCloses1m, 14);
+    const macdObj1m = calcMACD(rawCloses1m, 12, 26, 9);
+    const obvArray1m = calcOBV(rawCloses1m, rawVolumes1m);
 
     // --- Extract Latest Valid Values ---
+    // Use getLastValidValue for arrays, or .latest for indicator objects
     const latestRSI5m = getLastValidValue(rsiArray5m);
     const latestMACD5m = macdObj5m.latest.macd;
     const latestMACDSignal5m = macdObj5m.latest.signal;
@@ -228,17 +222,17 @@
     const latestBBUpper5m = boll5m.upper;
     const latestBBMiddle5m = boll5m.middle;
     const latestBBLower5m = boll5m.lower;
-    const latestATR5m = atr5m; // Your ATR function returns a single number
-    const latestADX5m = adx5m; // Your ADX function returns a single number
+    const latestATR5m = atr5m; 
+    const latestADX5m = adx5m; 
     const latestStochK5m = stochasticObj5m.latest.k;
     const latestStochD5m = stochasticObj5m.latest.d;
-    const latestCCI5m = cci5m; // Your CCI function returns a single number
-    const latestSAR5m = sar5m; // Your SAR function returns a single number
-    const latestVWAP5m = vwap5m; // Your VWAP function returns a single number
+    const latestCCI5m = cci5m; 
+    const latestSAR5m = sar5m; 
+    const latestVWAP5m = vwap5m; 
     const latestOBV5m = getLastValidValue(obvArray5m);
     const latestIchimokuTenkan5m = ichimoku5m.tenkan;
     const latestIchimokuKijun5m = ichimoku5m.kijun;
-    const latestVolOsc5m = volOsc5m; // Your VolOsc function returns a single number
+    const latestVolOsc5m = volOsc5m; 
 
     const latestEMA5_1m = getLastValidValue(ema5_1m_array);
     const latestEMA13_1m = getLastValidValue(ema13_1m_array);
@@ -250,9 +244,9 @@
     const latestOBV1m = getLastValidValue(obvArray1m);
 
     // --- Price Action & Structure (from 5-minute data) ---
-    // You can add more sophisticated pattern recognition here later
-    const support5m = Math.min(...cleanLows5m.slice(-10)); // From last 10 candles for quick S/R
-    const resistance5m = Math.max(...cleanHighs5m.slice(-10));
+    // From last 10 candles for quick S/R. Used rawLows/Highs here.
+    const support5m = Math.min(...rawLows5m.slice(-10)); 
+    const resistance5m = Math.max(...rawHighs5m.slice(-10));
 
     // --- Scoring System (Probability of Profit - POP) ---
     let buyScore = 0;
@@ -261,14 +255,14 @@
 
     // Helper to add points if condition is true and value is finite
     const addScore = (condition, points, detail) => {
-        if (condition && Number.isFinite(points)) { // Check condition is true and points are finite
+        if (condition && Number.isFinite(points)) { 
             buyScore += points;
             scoreDetails.push(`+${points} ${detail}`);
         }
     };
     const subtractScore = (condition, points, detail) => {
         if (condition && Number.isFinite(points)) {
-            sellScore += points; // Use positive points for sellScore
+            sellScore += points; 
             scoreDetails.push(`-${points} ${detail}`);
         }
     };
@@ -289,7 +283,6 @@
     }
 
     // Approaching/Bouncing from 5m Support/Resistance (Requires more sophisticated S/R detection for higher accuracy)
-    // For now, simple check:
     if (currentPrice > support5m && currentPrice < support5m * 1.005) { // Price close to or just above support
         addScore(true, 5, "5M Near Support");
     } else if (currentPrice < resistance5m && currentPrice > resistance5m * 0.995) { // Price close to or just below resistance
@@ -299,41 +292,45 @@
 
     // --- 2. Momentum Indicators (Medium-High Weight) ---
     // 5m MACD Crossover
-    if (latestMACD5m > latestMACDSignal5m && (macdObj5m.macdLine[cleanCloses5m.length - 2] < macdObj5m.signalLine[cleanCloses5m.length - 2])) {
+    // macdLine and signalLine arrays must have enough valid values at their end for this to work
+    if (latestMACD5m > latestMACDSignal5m && (macdObj5m.macdLine.length > 1 && macdObj5m.signalLine.length > 1 && macdObj5m.macdLine[macdObj5m.macdLine.length - 2] < macdObj5m.signalLine[macdObj5m.signalLine.length - 2])) {
         addScore(true, 15, "5M MACD Bull Cross");
-    } else if (latestMACD5m < latestMACDSignal5m && (macdObj5m.macdLine[cleanCloses5m.length - 2] > macdObj5m.signalLine[cleanCloses5m.length - 2])) {
+    } else if (latestMACD5m < latestMACDSignal5m && (macdObj5m.macdLine.length > 1 && macdObj5m.signalLine.length > 1 && macdObj5m.macdLine[macdObj5m.macdLine.length - 2] > macdObj5m.signalLine[macdObj5m.signalLine.length - 2])) {
         subtractScore(true, 15, "5M MACD Bear Cross");
     }
 
     // 5m RSI Overbought/Oversold & Turn
-    if (latestRSI5m <= 30 && getLastValidValue(rsiArray5m.slice(0, rsiArray5m.length - 1)) > latestRSI5m) { // Oversold and turning up
+    if (latestRSI5m <= 30 && rsiArray5m.length > 1 && getLastValidValue(rsiArray5m.slice(0, rsiArray5m.length - 1)) > latestRSI5m) { // Oversold and turning up
         addScore(true, 10, "5M RSI Oversold Reversal");
-    } else if (latestRSI5m >= 70 && getLastValidValue(rsiArray5m.slice(0, rsiArray5m.length - 1)) < latestRSI5m) { // Overbought and turning down
+    } else if (latestRSI5m >= 70 && rsiArray5m.length > 1 && getLastValidValue(rsiArray5m.slice(0, rsiArray5m.length - 1)) < latestRSI5m) { // Overbought and turning down
         subtractScore(true, 10, "5M RSI Overbought Reversal");
     }
 
     // 5m Stochastic Crossover
-    if (latestStochK5m > latestStochD5m && getLastValidValue(stochasticObj5m.kLine.slice(0, stochasticObj5m.kLine.length - 1)) < getLastValidValue(stochasticObj5m.dLine.slice(0, stochasticObj5m.dLine.length - 1)) && latestStochK5m < 80) {
+    if (latestStochK5m > latestStochD5m && stochasticObj5m.kLine.length > 1 && stochasticObj5m.dLine.length > 1 && getLastValidValue(stochasticObj5m.kLine.slice(0, stochasticObj5m.kLine.length - 1)) < getLastValidValue(stochasticObj5m.dLine.slice(0, stochasticObj5m.dLine.length - 1)) && latestStochK5m < 80) {
         addScore(true, 8, "5M Stoch Bull Cross");
-    } else if (latestStochK5m < latestStochD5m && getLastValidValue(stochasticObj5m.kLine.slice(0, stochasticObj5m.kLine.length - 1)) > getLastValidValue(stochasticObj5m.dLine.slice(0, stochasticObj5m.dLine.length - 1)) && latestStochK5m > 20) {
+    } else if (latestStochK5m < latestStochD5m && stochasticObj5m.kLine.length > 1 && stochasticObj5m.dLine.length > 1 && getLastValidValue(stochasticObj5m.kLine.slice(0, stochasticObj5m.kLine.length - 1)) > getLastValidValue(stochasticObj5m.dLine.slice(0, stochasticObj5m.dLine.length - 1)) && latestStochK5m > 20) {
         subtractScore(true, 8, "5M Stoch Bear Cross");
     }
 
     // --- 3. Volume & Volatility (Confirmation) ---
     // 5m OBV Trend Confirmation
-    if (currentPrice > rawCloses5m[rawCloses5m.length - 2] && latestOBV5m > obvArray5m[obvArray5m.length - 2]) {
-        addScore(true, 7, "5M OBV Confirms Up");
-    } else if (currentPrice < rawCloses5m[rawCloses5m.length - 2] && latestOBV5m < obvArray5m[obvArray5m.length - 2]) {
-        subtractScore(true, 7, "5M OBV Confirms Down");
+    if (rawCloses5m.length > 1 && rawVolumes5m.length > 1) { // Ensure enough data for comparison
+        if (currentPrice > rawCloses5m[rawCloses5m.length - 2] && latestOBV5m > obvArray5m[obvArray5m.length - 2]) {
+            addScore(true, 7, "5M OBV Confirms Up");
+        } else if (currentPrice < rawCloses5m[rawCloses5m.length - 2] && latestOBV5m < obvArray5m[obvArray5m.length - 2]) {
+            subtractScore(true, 7, "5M OBV Confirms Down");
+        }
     }
+    
 
     // 5m Bollinger Bands (Price Reversion/Breakout)
-    if (currentPrice <= latestBBLower5m && currentPrice > rawCloses5m[rawCloses5m.length - 2]) { // Price touching/below lower band and starting to turn up
+    if (currentPrice <= latestBBLower5m && currentPrice > rawCloses5m[rawCloses5m.length - 2]) { 
         addScore(true, 10, "5M BB Lower Band Bounce");
-    } else if (currentPrice >= latestBBUpper5m && currentPrice < rawCloses5m[rawCloses5m.length - 2]) { // Price touching/above upper band and starting to turn down
+    } else if (currentPrice >= latestBBUpper5m && currentPrice < rawCloses5m[rawCloses5m.length - 2]) { 
         subtractScore(true, 10, "5M BB Upper Band Bounce");
     }
-    // Detecting BB squeeze and breakout is more complex, but can be added here if needed.
+    
 
     // --- 4. 1-Minute Entry Confluence (Crucial for minute trading) ---
     // 1m EMA Alignment
@@ -344,23 +341,22 @@
     }
 
     // 1m MACD Crossover
-    if (latestMACD1m > latestMACDSignal1m && (macdObj1m.macdLine[cleanCloses1m.length - 2] < macdObj1m.signalLine[cleanCloses1m.length - 2])) {
+    if (latestMACD1m > latestMACDSignal1m && (macdObj1m.macdLine.length > 1 && macdObj1m.signalLine.length > 1 && macdObj1m.macdLine[cleanCloses1m.length - 2] < macdObj1m.signalLine[cleanCloses1m.length - 2])) {
         addScore(true, 10, "1M MACD Bull Cross Entry");
-    } else if (latestMACD1m < latestMACDSignal1m && (macdObj1m.macdLine[cleanCloses1m.length - 2] > macdObj1m.signalLine[cleanCloses1m.length - 2])) {
+    } else if (latestMACD1m < latestMACDSignal1m && (macdObj1m.macdLine.length > 1 && macdObj1m.signalLine.length > 1 && macdObj1m.macdLine[cleanCloses1m.length - 2] > macdObj1m.signalLine[cleanCloses1m.length - 2])) {
         subtractScore(true, 10, "1M MACD Bear Cross Entry");
     }
 
     // 1m RSI Oversold/Overbought
-    if (latestRSI1m <= 25 && getLastValidValue(rsiArray1m.slice(0, rsiArray1m.length - 1)) > latestRSI1m) { // More aggressive for 1m
+    if (latestRSI1m <= 25 && rsiArray1m.length > 1 && getLastValidValue(rsiArray1m.slice(0, rsiArray1m.length - 1)) > latestRSI1m) { 
         addScore(true, 8, "1M RSI Oversold Entry");
-    } else if (latestRSI1m >= 75 && getLastValidValue(rsiArray1m.slice(0, rsiArray1m.length - 1)) < latestRSI1m) { // More aggressive for 1m
+    } else if (latestRSI1m >= 75 && rsiArray1m.length > 1 && getLastValidValue(rsiArray1m.slice(0, rsiArray1m.length - 1)) < latestRSI1m) { 
         subtractScore(true, 8, "1M RSI Overbought Entry");
     }
 
     // --- Advanced / Confirmation Indicators (Lower Weight) ---
-    // (Your existing indicators, just updated to use latest values)
-    // ADX is usually only the latest value from your calcADX.
-    if (latestADX5m > 25) { // ADX for trend strength
+    // ADX only returns a single value, so we only check its current value against a threshold.
+    if (latestADX5m > 25) { 
         addScore(true, 5, "5M ADX Strong Trend");
     }
 
@@ -385,22 +381,22 @@
 
 
     // --- Final Signal Determination ---
-    const totalScore = buyScore - sellScore; // Net score
+    const totalScore = buyScore - sellScore; 
     let signalType = "Neutral";
-    let pop = 0; // Probability of Profit
+    let pop = 0; 
 
     // Define the ranges for each signal type - THESE NEED BACKTESTING AND ADJUSTMENT
-    const STRONG_BUY_THRESHOLD = 30; // Needs significant positive confluence
-    const BUY_THRESHOLD = 15;      // Moderate positive confluence
-    const SELL_THRESHOLD = -30;    // Needs significant negative confluence (negative totalScore)
-    const WEAK_SELL_THRESHOLD = -15; // Moderate negative confluence (negative totalScore)
+    const STRONG_BUY_THRESHOLD = 30; 
+    const BUY_THRESHOLD = 15;      
+    const SELL_THRESHOLD = -30;    
+    const WEAK_SELL_THRESHOLD = -15; 
 
     if (totalScore >= STRONG_BUY_THRESHOLD) {
         signalType = "Strong Buy";
-        pop = Math.min(100, Math.round((buyScore / (buyScore + sellScore || 1)) * 100)); // Calculate POP from contributing positive score
+        pop = Math.min(100, Math.round((buyScore / (buyScore + sellScore || 1)) * 100)); 
     } else if (totalScore <= SELL_THRESHOLD) {
         signalType = "Strong Sell";
-        pop = Math.min(100, Math.round((sellScore / (buyScore + sellScore || 1)) * 100)); // Calculate POP from contributing negative score
+        pop = Math.min(100, Math.round((sellScore / (buyScore + sellScore || 1)) * 100)); 
     } else if (totalScore >= BUY_THRESHOLD) {
         signalType = "Buy";
         pop = Math.min(100, Math.round((buyScore / (buyScore + sellScore || 1)) * 100));
@@ -409,15 +405,13 @@
         pop = Math.min(100, Math.round((sellScore / (buyScore + sellScore || 1)) * 100));
     } else {
         signalType = "Neutral";
-        // For neutral, POP could be low, or reflect how "balanced" the scores are
-        pop = 50; // Neutral signal, often means 50% probability either way
-        // Or could be: Math.min(100, Math.round((Math.abs(totalScore) / (buyScore + sellScore || 1)) * 100));
+        pop = 50; 
     }
 
 
     // --- TP & SL (Based on ATR for Minute Trading) ---
-    const tpFactor = 1.5; // Example: TP is 1.5 * ATR
-    const slFactor = 0.75; // Example: SL is 0.75 * ATR
+    const tpFactor = 1.5; 
+    const slFactor = 0.75; 
 
     let tp, sl;
     if (signalType.includes("Buy")) {
@@ -426,7 +420,7 @@
     } else if (signalType.includes("Sell")) {
         tp = currentPrice - (latestATR5m * tpFactor);
         sl = currentPrice + (latestATR5m * slFactor);
-    } else { // Neutral or no clear signal, set generic/safe values for display/analysis
+    } else { 
         tp = currentPrice * 1.005;
         sl = currentPrice * 0.995;
     }
@@ -440,16 +434,14 @@
 
 
     // --- Leverage & Estimated Profit ---
-    let leverage = 5; // Default leverage
+    let leverage = 5; 
     if (pop >= 80) leverage = 9;
     else if (pop >= 65) leverage = 7;
     else if (pop >= 50) leverage = 6;
 
-    // Adjust leverage more cautiously if ATR is very high (high volatility) or very low (no movement)
-    // These are examples - fine-tune these thresholds
-    if (latestATR5m > currentPrice * 0.005 && latestATR5m < currentPrice * 0.015) leverage = Math.min(leverage, 7); // Cap leverage if ATR is moderately high
-    else if (latestATR5m >= currentPrice * 0.015) leverage = 5; // Use minimal leverage for very high volatility
-    else if (latestATR5m < currentPrice * 0.0005) leverage = Math.max(leverage, 6); // Boost if very low volatility but not dead flat
+    if (latestATR5m > currentPrice * 0.005 && latestATR5m < currentPrice * 0.015) leverage = Math.min(leverage, 7); 
+    else if (latestATR5m >= currentPrice * 0.015) leverage = 5; 
+    else if (latestATR5m < currentPrice * 0.0005) leverage = Math.max(leverage, 6); 
 
     const profitPct = (((tp - currentPrice) / currentPrice) * 100 * leverage).toFixed(2);
 
@@ -472,26 +464,26 @@
       sl: sl.toFixed(4),
       leverage: leverage + "x",
       pop,
-      rsi: Number.isFinite(latestRSI5m) ? latestRSI5m : 0, // Display the latest RSI value, handle NaN
+      rsi: Number.isFinite(latestRSI5m) ? latestRSI5m : 0, 
       estimated_profit: profitPct + "%",
       signal: signalType,
       // Pass all latest indicator values to the `indicators` object for raw data analysis
       indicators: {
         rsi5m: latestRSI5m,
-        macd5m: macdObj5m.latest, // Pass the entire .latest object for MACD
+        macd5m: macdObj5m.latest, 
         ema5_5m: latestEMA5_5m,
         ema13_5m: latestEMA13_5m,
         ema21_5m: latestEMA21_5m,
         ema50_5m: latestEMA50_5m,
-        boll5m: boll5m, // Still returns an object directly
+        boll5m: boll5m, 
         atr5m: latestATR5m,
         adx5m: latestADX5m,
-        stoch5m: stochasticObj5m.latest, // Pass the entire .latest object for Stochastic
+        stoch5m: stochasticObj5m.latest, 
         cci5m: latestCCI5m,
         sar5m: latestSAR5m,
         vwap5m: latestVWAP5m,
         obv5m: latestOBV5m,
-        ichimoku5m: ichimoku5m, // Still returns an object directly
+        ichimoku5m: ichimoku5m, 
         volOsc5m: latestVolOsc5m,
         ema5_1m: latestEMA5_1m,
         ema13_1m: latestEMA13_1m,
@@ -536,12 +528,15 @@ function getLastValidValue(arr) {
     return NaN; // Or 0, depending on desired default
 }
 
+// Helper function to get the last valid value from an array (KEEP THIS AS IS)
+// function getLastValidValue(arr) { ... }
+
 // 1. EMA (Exponential Moving Average) - Returns an array of EMA values
 function calcEMA(values, period) {
     const emaArray = [];
     if (!values || values.length < period) {
-        // console.warn(`calcEMA failed: period=${period}, length=${values.length}`);
-        return emaArray; // Return empty array
+        // Not enough data for initial SMA, fill entire array with NaN
+        return Array(values.length).fill(NaN); 
     }
 
     const k = 2 / (period + 1);
@@ -549,38 +544,42 @@ function calcEMA(values, period) {
 
     // Initialize with SMA for the first 'period' values
     let sum = 0;
+    let initialValidCount = 0;
     for (let i = 0; i < period; i++) {
         const val = values[i];
-        if (!Number.isFinite(val) || val <= 0) {
-            // If any initial value is invalid, we can't compute SMA, so return empty
-            // console.warn(`calcEMA: Invalid initial value at index ${i}`);
-            return [];
+        if (Number.isFinite(val) && val > 0) { // Only sum valid numbers
+            sum += val;
+            initialValidCount++;
         }
-        sum += val;
-        emaArray.push(NaN); // No EMA for initial periods
+        emaArray.push(NaN); // Always push NaN for initial periods, actual EMA starts later
     }
-    ema = sum / period;
-    emaArray[period - 1] = ema; // Store initial SMA as first EMA
+
+    // Only set initial EMA if enough valid data points for SMA
+    if (initialValidCount >= period) { // Ensure enough *valid* data for initial SMA
+        ema = sum / period;
+        emaArray[period - 1] = ema; // Store initial SMA as first EMA
+    } else {
+        // If initial SMA cannot be computed, then EMA cannot be computed from this point.
+        // The array will remain mostly NaN if data is insufficient
+    }
 
     for (let i = period; i < values.length; i++) {
         const val = values[i];
-        if (!Number.isFinite(val) || val <= 0) {
-            emaArray.push(NaN); // Push NaN if current value is invalid
-            // console.warn(`calcEMA: Invalid value at index ${i}`);
-            continue; // Continue processing if possible
+        if (!Number.isFinite(val) || val <= 0 || isNaN(ema)) { // If current val is bad OR previous EMA was NaN
+            emaArray.push(NaN); 
+            ema = NaN; // Propagate NaN
+            continue; 
         }
         ema = (val * k) + (ema * (1 - k));
         emaArray.push(ema);
     }
     return emaArray;
 }
-
 // 2. RSI (Relative Strength Index) - Returns an array of RSI values
 function calcRSI(values, period = 14) {
     const rsiArray = [];
     if (!values || values.length < period + 1) {
-        // console.warn(`calcRSI failed: period=${period}, length=${values.length}`);
-        return rsiArray;
+        return Array(values.length).fill(NaN); // Fill array with NaN if insufficient data
     }
 
     let avgGain = 0;
@@ -591,23 +590,26 @@ function calcRSI(values, period = 14) {
     let initialLosses = 0;
     for (let i = 1; i <= period; i++) {
         const change = values[i] - values[i-1];
-        if (change > 0) {
-            initialGains += change;
-        } else {
-            initialLosses += Math.abs(change);
+        if (Number.isFinite(change)) { // Only consider finite changes
+            if (change > 0) {
+                initialGains += change;
+            } else {
+                initialLosses += Math.abs(change);
+            }
         }
     }
     avgGain = initialGains / period;
     avgLoss = initialLosses / period;
 
+    // Fill initial periods with NaN
     for (let i = 0; i < period; i++) {
-        rsiArray.push(NaN); // No RSI for initial periods
+        rsiArray.push(NaN); 
     }
 
     // First RSI calculation
     let rs = (avgLoss === 0) ? Infinity : avgGain / avgLoss;
     let rsi = 100 - (100 / (1 + rs));
-    rsiArray.push(Number.isFinite(rsi) ? rsi : NaN);
+    rsiArray.push(Number.isFinite(rsi) ? rsi : NaN); // Push first valid RSI or NaN
 
 
     for (let i = period + 1; i < values.length; i++) {
@@ -615,22 +617,25 @@ function calcRSI(values, period = 14) {
         let gain = 0;
         let loss = 0;
 
-        if (change > 0) {
-            gain = change;
+        if (!Number.isFinite(change)) { // If change is not finite, propagate NaN
+            avgGain = NaN;
+            avgLoss = NaN;
         } else {
-            loss = Math.abs(change);
+            if (change > 0) {
+                gain = change;
+            } else {
+                loss = Math.abs(change);
+            }
+            avgGain = ((avgGain * (period - 1)) + gain) / period;
+            avgLoss = ((avgLoss * (period - 1)) + loss) / period;
         }
-
-        avgGain = ((avgGain * (period - 1)) + gain) / period;
-        avgLoss = ((avgLoss * (period - 1)) + loss) / period;
-
-        rs = (avgLoss === 0) ? Infinity : avgGain / avgLoss;
+        
+        rs = (Number.isFinite(avgGain) && Number.isFinite(avgLoss) && avgLoss === 0) ? Infinity : (Number.isFinite(avgGain) && Number.isFinite(avgLoss) ? avgGain / avgLoss : NaN);
         rsi = 100 - (100 / (1 + rs));
         rsiArray.push(Number.isFinite(rsi) ? rsi : NaN);
     }
     return rsiArray;
 }
-
 // 3. MACD (Moving Average Convergence Divergence) - Returns object with arrays
 function calcMACD(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
     const macdResult = {
@@ -641,7 +646,10 @@ function calcMACD(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
     };
 
     if (!values || values.length < slowPeriod) {
-        // console.warn(`calcMACD failed: insufficient data, length=${values.length}, required=${slowPeriod}`);
+        // Fill all arrays with NaN if insufficient data
+        macdResult.macdLine = Array(values.length).fill(NaN);
+        macdResult.signalLine = Array(values.length).fill(NaN);
+        macdResult.histogram = Array(values.length).fill(NaN);
         return macdResult;
     }
 
@@ -653,8 +661,7 @@ function calcMACD(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
 
     // 3. Calculate MACD Line (Fast EMA - Slow EMA)
     const tempMacdLine = [];
-    // The MACD line can only start once both EMAs have valid values
-    const macdStartIdx = Math.max(fastPeriod, slowPeriod) - 1; // Correct start index for both EMAs to be valid
+    const macdStartIdx = Math.max(fastPeriod, slowPeriod) -1; // Index where EMAs start having non-NaN values
 
     for (let i = 0; i < values.length; i++) {
         if (i < macdStartIdx || isNaN(fastEMA_values[i]) || isNaN(slowEMA_values[i])) {
@@ -665,24 +672,28 @@ function calcMACD(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
     }
     macdResult.macdLine = tempMacdLine;
 
-
     // 4. Calculate Signal Line (EMA of the MACD Line)
     // Create a temporary array of objects from macdLine values for calcEMA
     const macdLineForEMA = tempMacdLine.map(val => ({ close: val }));
-    const tempSignalLine = calcEMA(macdLineForEMA, signalPeriod);
+    const tempSignalLineValues = calcEMA(macdLineForEMA, signalPeriod);
 
-    // Now, align the tempSignalLine with the original data length by prepending NaNs
-    // The signal line starts valid after the signalPeriod from when MACD line started
-    const signalStartIdx = macdStartIdx + signalPeriod -1; // Correct signal line start index
-
-    const adjustedSignalLine = Array(signalStartIdx).fill(NaN).concat(tempSignalLine.slice(signalPeriod -1)); // This needs careful alignment
-    // A simpler way: fill the macdResult.signalLine directly from tempSignalLine starting from relevant index
+    // Align signalLine array to match original data length
     macdResult.signalLine = Array(values.length).fill(NaN);
-    let signalLineSrcIdx = 0;
-    for(let i = 0; i < values.length; i++) {
-        if (i >= signalStartIdx && signalLineSrcIdx < tempSignalLine.length) {
-            macdResult.signalLine[i] = tempSignalLine[signalLineSrcIdx];
-            signalLineSrcIdx++;
+    // Find the first non-NaN index in tempMacdLine to know where signalLine can start
+    const firstValidMacdLineIdx = tempMacdLine.findIndex(val => Number.isFinite(val));
+
+    if (firstValidMacdLineIdx !== -1 && tempSignalLineValues.length > 0) {
+        // Calculate the actual start index for signal line in the main array
+        const signalLineActualStartIdx = firstValidMacdLineIdx + (signalPeriod - 1);
+        
+        let srcIdx = tempSignalLineValues.findIndex(val => Number.isFinite(val)); // Find first valid in tempSignalLine
+        for(let i = signalLineActualStartIdx; i < values.length; i++) {
+            if (srcIdx < tempSignalLineValues.length && Number.isFinite(tempSignalLineValues[srcIdx])) {
+                macdResult.signalLine[i] = tempSignalLineValues[srcIdx];
+                srcIdx++;
+            } else {
+                macdResult.signalLine[i] = NaN; // Propagate NaN
+            }
         }
     }
 
@@ -702,7 +713,6 @@ function calcMACD(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
 
     return macdResult;
 }
-
 // 4. Stochastic Oscillator - Returns object with arrays for %K and %D
 function calcStochastic(highs, lows, closes, kPeriod = 14, dPeriod = 3) {
     const stochasticResult = {
@@ -710,12 +720,20 @@ function calcStochastic(highs, lows, closes, kPeriod = 14, dPeriod = 3) {
         dLine: [],
         latest: { k: NaN, d: NaN }
     };
-    if (highs.length < kPeriod || lows.length < kPeriod || closes.length < kPeriod) {
-        // console.warn(`calcStochastic failed: insufficient data`);
+    if (!highs || !lows || !closes || highs.length < kPeriod || lows.length < kPeriod || closes.length < kPeriod) {
+        // Fill all arrays with NaN if insufficient data
+        stochasticResult.kLine = Array(closes.length).fill(NaN);
+        stochasticResult.dLine = Array(closes.length).fill(NaN);
         return stochasticResult;
     }
 
     const kValues = [];
+    // Initialize kLine with NaNs for initial periods
+    for(let i = 0; i < kPeriod - 1; i++) {
+        stochasticResult.kLine.push(NaN);
+        kValues.push(NaN); // Also add to kValues which will be EMA source
+    }
+
     for (let i = kPeriod - 1; i < closes.length; i++) {
         const sliceHigh = highs.slice(i - kPeriod + 1, i + 1);
         const sliceLow = lows.slice(i - kPeriod + 1, i + 1);
@@ -725,56 +743,77 @@ function calcStochastic(highs, lows, closes, kPeriod = 14, dPeriod = 3) {
         const lowest = Math.min(...sliceLow);
 
         let k = NaN;
-        if (highest - lowest !== 0) { // Avoid division by zero
+        if (Number.isFinite(currentClose) && Number.isFinite(highest) && Number.isFinite(lowest) && (highest - lowest !== 0)) { 
             k = ((currentClose - lowest) / (highest - lowest)) * 100;
         }
-        kValues.push(Number.isFinite(k) ? k : NaN);
+        stochasticResult.kLine.push(Number.isFinite(k) ? k : NaN); // Push to final kLine array directly
+        kValues.push(Number.isFinite(k) ? k : NaN); // Keep this for D line EMA calculation
     }
 
-    // Pad kLine with NaNs to match original data length
-    stochasticResult.kLine = Array(kPeriod - 1).fill(NaN).concat(kValues);
-
     // Calculate D line (SMA of K line)
-    // Need to pass objects with 'close' property to calcEMA
     const kLineForEMA = kValues.map(val => ({ close: val }));
-    const dValues = calcEMA(kLineForEMA, dPeriod); // Use calcEMA for D line (SMA of K)
+    const dValues = calcEMA(kLineForEMA, dPeriod); 
 
-    // Pad dLine with NaNs to match original data length
-    const dLineStartPadding = kPeriod - 1 + dPeriod - 1; // K starts at kPeriod-1, D starts dPeriod-1 after K
-    stochasticResult.dLine = Array(dLineStartPadding).fill(NaN).concat(dValues.slice(dPeriod -1));
+    // Align dLine array to match original data length
+    stochasticResult.dLine = Array(closes.length).fill(NaN);
+    const firstValidKLineIdx = stochasticResult.kLine.findIndex(val => Number.isFinite(val));
+    
+    if (firstValidKLineIdx !== -1 && dValues.length > 0) {
+        const dLineActualStartIdx = firstValidKLineIdx + (dPeriod - 1);
+        let srcIdx = dValues.findIndex(val => Number.isFinite(val));
+        for(let i = dLineActualStartIdx; i < closes.length; i++) {
+            if (srcIdx < dValues.length && Number.isFinite(dValues[srcIdx])) {
+                stochasticResult.dLine[i] = dValues[srcIdx];
+                srcIdx++;
+            } else {
+                stochasticResult.dLine[i] = NaN;
+            }
+        }
+    }
 
     stochasticResult.latest.k = getLastValidValue(stochasticResult.kLine);
     stochasticResult.latest.d = getLastValidValue(stochasticResult.dLine);
 
     return stochasticResult;
 }
-
 // 5. OBV (On-Balance Volume) - Returns an array of OBV values
 function calcOBV(closes, volumes) {
     const obvArray = [];
     if (!closes || !volumes || closes.length === 0 || volumes.length === 0 || closes.length !== volumes.length) {
-        // console.warn("calcOBV failed: invalid input data");
-        return obvArray;
+        // If invalid input, return array of NaNs matching closes length if possible, else empty
+        return Array(closes ? closes.length : 0).fill(NaN); 
     }
 
     let obv = 0;
-    if (closes.length > 0) {
+    if (closes.length > 0 && Number.isFinite(volumes[0])) {
         obv = volumes[0]; // Initialize OBV with the volume of the first bar
         obvArray.push(obv);
+    } else {
+        obvArray.push(NaN); // Push NaN if initial value is invalid
+        obv = NaN; // Propagate NaN
     }
 
     for (let i = 1; i < closes.length; i++) {
-        if (closes[i] > closes[i - 1]) {
-            obv += volumes[i];
-        } else if (closes[i] < closes[i - 1]) {
-            obv -= volumes[i];
+        const currentClose = closes[i];
+        const prevClose = closes[i-1];
+        const currentVolume = volumes[i];
+
+        if (!Number.isFinite(currentClose) || !Number.isFinite(prevClose) || !Number.isFinite(currentVolume) || isNaN(obv)) {
+            obvArray.push(NaN);
+            obv = NaN; // Propagate NaN
+            continue;
+        }
+
+        if (currentClose > prevClose) {
+            obv += currentVolume;
+        } else if (currentClose < prevClose) {
+            obv -= currentVolume;
         }
         // If close[i] == close[i-1], OBV remains unchanged for that bar
         obvArray.push(obv);
     }
     return obvArray;
 }
-
 // --- Helper Functions for Divergence Detection (Optional but powerful) ---
 // These are more advanced and might require careful tuning for different timeframes.
 // For initial implementation, we might not use these directly in the scoring,
