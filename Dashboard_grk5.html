@@ -409,17 +409,20 @@
     }
 
 
-    // --- TP & SL (Based on ATR for Minute Trading) ---
+// --- TP & SL (Based on ATR for Minute Trading) ---
     const tpFactor = 1.5; 
     const slFactor = 0.75; 
 
+    // Add a fallback for ATR if it's 0 or NaN
+    const effectiveATR = (Number.isFinite(latestATR5m) && latestATR5m > 0) ? latestATR5m : currentPrice * 0.002; // Fallback to 0.2% of price if ATR is invalid/zero
+
     let tp, sl;
     if (signalType.includes("Buy")) {
-        tp = currentPrice + (latestATR5m * tpFactor);
-        sl = currentPrice - (latestATR5m * slFactor);
+        tp = currentPrice + (effectiveATR * tpFactor);
+        sl = currentPrice - (effectiveATR * slFactor);
     } else if (signalType.includes("Sell")) {
-        tp = currentPrice - (latestATR5m * tpFactor);
-        sl = currentPrice + (latestATR5m * slFactor);
+        tp = currentPrice - (effectiveATR * tpFactor);
+        sl = currentPrice + (effectiveATR * slFactor);
     } else { 
         tp = currentPrice * 1.005;
         sl = currentPrice * 0.995;
@@ -662,10 +665,12 @@ function calcMACD(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
 
     // 3. Calculate MACD Line (Fast EMA - Slow EMA)
     const tempMacdLine = [];
-    const macdStartIdx = Math.max(fastPeriod, slowPeriod) -1; // Index where EMAs start having non-NaN values
+    // MACD line is valid where both fastEMA and slowEMA are valid
+    // This typically means from Math.max(fastPeriod, slowPeriod) - 1 index onwards
+    const commonStartIdx = Math.max(fastPeriod, slowPeriod) - 1; 
 
     for (let i = 0; i < values.length; i++) {
-        if (i < macdStartIdx || isNaN(fastEMA_values[i]) || isNaN(slowEMA_values[i])) {
+        if (i < commonStartIdx || isNaN(fastEMA_values[i]) || isNaN(slowEMA_values[i])) {
             tempMacdLine.push(NaN);
         } else {
             tempMacdLine.push(fastEMA_values[i] - slowEMA_values[i]);
@@ -679,25 +684,27 @@ function calcMACD(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
     const tempSignalLineValues = calcEMA(macdLineForEMA, signalPeriod);
 
     // Align signalLine array to match original data length
-    macdResult.signalLine = Array(values.length).fill(NaN);
-    // Find the first non-NaN index in tempMacdLine to know where signalLine can start
-    const firstValidMacdLineIdx = tempMacdLine.findIndex(val => Number.isFinite(val));
+    // The signal line's valid values start after `signalPeriod` periods *of the MACD line*.
+    // So, it's relative to where `tempMacdLine` first becomes valid.
+    const signalLineStartIndex = (tempMacdLine.findIndex(val => Number.isFinite(val)) !== -1) ? 
+                                  tempMacdLine.findIndex(val => Number.isFinite(val)) + signalPeriod - 1 : 
+                                  values.length; // If MACD line is all NaN, signal line is all NaN
 
-    if (firstValidMacdLineIdx !== -1 && tempSignalLineValues.length > 0) {
-        // Calculate the actual start index for signal line in the main array
-        const signalLineActualStartIdx = firstValidMacdLineIdx + (signalPeriod - 1);
-        
-        let srcIdx = tempSignalLineValues.findIndex(val => Number.isFinite(val)); // Find first valid in tempSignalLine
-        for(let i = signalLineActualStartIdx; i < values.length; i++) {
-            if (srcIdx < tempSignalLineValues.length && Number.isFinite(tempSignalLineValues[srcIdx])) {
+    macdResult.signalLine = Array(values.length).fill(NaN); // Initialize with NaNs
+    
+    // Copy valid signal line values from tempSignalLineValues to macdResult.signalLine
+    let srcIdx = 0; // Index for tempSignalLineValues
+    for(let i = 0; i < values.length; i++) {
+        if (i >= signalLineStartIndex && srcIdx < tempSignalLineValues.length) {
+            if (Number.isFinite(tempSignalLineValues[srcIdx])) {
                 macdResult.signalLine[i] = tempSignalLineValues[srcIdx];
                 srcIdx++;
             } else {
                 macdResult.signalLine[i] = NaN; // Propagate NaN
+                srcIdx++; // Still increment source index to move past this NaN
             }
         }
     }
-
 
     // 5. Calculate MACD Histogram
     for (let i = 0; i < values.length; i++) {
@@ -714,7 +721,8 @@ function calcMACD(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
 
     return macdResult;
 }
-// 4. Stochastic Oscillator - Returns object with arrays for %K and %D
+  
+  // 4. Stochastic Oscillator - Returns object with arrays for %K and %D
 function calcStochastic(highs, lows, closes, kPeriod = 14, dPeriod = 3) {
     const stochasticResult = {
         kLine: [],
@@ -901,18 +909,30 @@ function checkForDivergence(priceHighs, priceLows, indicatorValues, indicatorHig
   }
 
   function calcATR(highs, lows, closes, period = 14) {
-    if (highs.length < period || lows.length < period || closes.length < period) return 0;
+    if (!highs || !lows || !closes || highs.length < period +1 || lows.length < period +1 || closes.length < period +1) {
+        return 0; // Return 0 if not enough data
+    }
     const trs = [];
     for (let i = 1; i < highs.length; i++) {
-      if (!Number.isFinite(highs[i]) || !Number.isFinite(lows[i]) || !Number.isFinite(closes[i - 1])) continue;
-      const tr = Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1]));
+      const h = highs[i];
+      const l = lows[i];
+      const prevC = closes[i - 1];
+      
+      // Ensure all values are finite before calculating TR
+      if (!Number.isFinite(h) || !Number.isFinite(l) || !Number.isFinite(prevC)) {
+          trs.push(NaN); // Push NaN if any component is invalid
+          continue;
+      }
+      const tr = Math.max(h - l, Math.abs(h - prevC), Math.abs(l - prevC));
       trs.push(tr);
     }
-    if (trs.length < period) return 0;
-    const atr = calcEMA(trs, period);
-    return Number.isFinite(atr) ? atr : 0;
-  }
+    
+    // Now use getLastValidValue on the array returned by calcEMA
+    const atrArray = calcEMA(trs, period); // calcEMA now returns an array
+    const atr = getLastValidValue(atrArray);
 
+    return Number.isFinite(atr) ? atr : 0; // Return 0 if ATR is NaN
+  }
   function calcADX(highs, lows, closes, period) {
     if (highs.length < period + 1) return 0;
     let plusDM = 0, minusDM = 0, tr = 0;
