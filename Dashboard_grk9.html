@@ -537,42 +537,41 @@ function getLastValidValue(arr) {
 
 // 1. EMA (Exponential Moving Average) - Returns an array of EMA values
 function calcEMA(values, period) {
-    const emaArray = Array(values.length).fill(NaN); // Pre-fill with NaN for correct length
+    const emaArray = Array(values.length).fill(NaN); // Pre-fill with NaN
 
-    if (!values || values.length === 0) {
-        // console.log(`calcEMA: Input values array is empty for period ${period}. Returning NaNs.`);
-        return emaArray; 
-    }
-    if (values.length < period) {
-        // console.log(`calcEMA: Insufficient data length (${values.length}) for period ${period}. Returning NaNs.`);
-        // Even if length < period, we still try to get a single EMA if period is long but data short.
-        // So, do not return immediately, let it try to find a first valid value.
+    if (!values || values.length < period) {
+        return emaArray; // Return all NaNs if insufficient data
     }
 
     const k = 2 / (period + 1);
     let ema = NaN; // Current EMA value, initialized to NaN
 
-    // --- Aggressive Initialization: Find the first finite, positive value to kickstart EMA ---
-    let firstValidValueIndex = -1;
-    for (let i = 0; i < values.length; i++) {
-        if (Number.isFinite(values[i]) && values[i] > 0) {
-            ema = values[i]; // Kickstart EMA with the very first valid data point found
-            emaArray[i] = ema; // Store it
-            firstValidValueIndex = i;
-            // console.log(`calcEMA: Period ${period} - Aggressively kickstarted EMA at index ${i} with value ${ema}`);
+    // --- Phase 1: Find the first starting point for EMA calculation ---
+    // We need to find the first index 'i' where values[i] to values[i + period - 1]
+    // are all valid, finite numbers.
+    let firstValidSMAIndex = -1;
+    for (let i = 0; i <= values.length - period; i++) {
+        const slice = values.slice(i, i + period);
+        if (slice.every(val => Number.isFinite(val) && val > 0)) {
+            firstValidSMAIndex = i;
             break;
         }
     }
 
-    // If EMA was never initialized (e.g., all values were NaN or <= 0), return all NaNs
-    if (!Number.isFinite(ema)) {
-        // console.warn(`calcEMA: Period ${period} - EMA could not be initialized from any value in array. Returning all NaNs.`);
+    if (firstValidSMAIndex === -1) {
+        // console.warn(`calcEMA: Period ${period} - No full, clean period of data found. Returning all NaNs.`);
         return emaArray; 
     }
 
-    // --- Continue EMA calculation from the point it became valid ---
-    // Loop from the next index after the first valid EMA value was set
-    for (let i = firstValidValueIndex + 1; i < values.length; i++) {
+    // --- Phase 2: Calculate the initial EMA from the first valid period ---
+    let initialSum = values.slice(firstValidSMAIndex, firstValidSMAIndex + period).reduce((a, b) => a + b);
+    ema = initialSum / period;
+
+    // Place the first valid EMA value at the correct index
+    emaArray[firstValidSMAIndex + period - 1] = ema;
+
+    // --- Phase 3: Continue EMA calculation from that point ---
+    for (let i = firstValidSMAIndex + period; i < values.length; i++) {
         const val = values[i];
         
         // Propagate NaN if current value is invalid OR previous EMA was NaN
@@ -586,7 +585,7 @@ function calcEMA(values, period) {
         emaArray[i] = ema;
     }
     return emaArray;
-}  
+}
   // 2. RSI (Relative Strength Index) - Returns an array of RSI values
 function calcRSI(values, period = 14) {
     const rsiArray = [];
