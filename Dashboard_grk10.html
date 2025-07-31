@@ -647,6 +647,26 @@ function calcRSI(values, period = 14) {
     }
     return rsiArray;
 }
+// A simple SMA function to be used internally by calcMACD and calcStochastic
+function calcSMA(values, period) {
+    const smaArray = Array(values.length).fill(NaN);
+    if (!values || values.length < period) {
+        return smaArray;
+    }
+
+    let sum = 0;
+    for (let i = 0; i < period - 1; i++) {
+        sum += Number.isFinite(values[i]) ? values[i] : 0;
+    }
+
+    for (let i = period - 1; i < values.length; i++) {
+        sum += Number.isFinite(values[i]) ? values[i] : 0;
+        smaArray[i] = sum / period;
+        sum -= Number.isFinite(values[i - (period - 1)]) ? values[i - (period - 1)] : 0;
+    }
+    return smaArray;
+}
+
 // 3. MACD (Moving Average Convergence Divergence) - Returns object with arrays
 function calcMACD(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
     const macdResult = {
@@ -672,26 +692,15 @@ function calcMACD(values, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
         }
     }
 
-    // Calculate Signal Line (EMA of the MACD Line)
-    // CRUCIAL FIX: Filter out leading NaNs from macdLine BEFORE passing to calcEMA
-    const cleanMacdLineForEMA = macdResult.macdLine.filter(val => Number.isFinite(val));
-    const macdLineForEMAObjects = cleanMacdLineForEMA.map(val => ({ close: val }));
+    // Calculate Signal Line (using SMA of the MACD Line for robustness)
+    const signalLineValues = calcSMA(macdResult.macdLine, signalPeriod);
     
-    const tempSignalLineValues = calcEMA(macdLineForEMAObjects, signalPeriod);
-
-    // Copy valid signal line values back to macdResult.signalLine, ensuring correct alignment
-    // Find the first valid index in the original macdLine, and start copying from there + signalPeriod-1
-    const firstValidMacdLineIdx = macdResult.macdLine.findIndex(val => Number.isFinite(val));
-
-    if (firstValidMacdLineIdx !== -1 && tempSignalLineValues.length > 0) {
-        let signalDestIdx = firstValidMacdLineIdx + signalPeriod - 1;
-        for (let srcIdx = 0; srcIdx < tempSignalLineValues.length; srcIdx++) {
-            if (signalDestIdx < values.length) { // Ensure we don't go out of bounds
-                macdResult.signalLine[signalDestIdx] = tempSignalLineValues[srcIdx];
-                signalDestIdx++;
-            } else {
-                break; // Stop if we've filled up to the end of values.length
-            }
+    // Copy valid signal line values to macdResult.signalLine
+    for(let i = 0; i < values.length; i++) {
+        if (Number.isFinite(signalLineValues[i])) {
+            macdResult.signalLine[i] = signalLineValues[i];
+        } else {
+            macdResult.signalLine[i] = NaN;
         }
     }
     
@@ -743,25 +752,15 @@ function calcStochastic(highs, lows, closes, kPeriod = 14, dPeriod = 3) {
         stochasticResult.kLine[i] = Number.isFinite(k) ? k : NaN;
     }
     
-    // Calculate D line (EMA/SMA of K line)
-    // CRUCIAL FIX: Filter out leading NaNs from kLine BEFORE passing to calcEMA
-    const cleanKLineForEMA = stochasticResult.kLine.filter(val => Number.isFinite(val));
-    const kLineForEMAObjects = cleanKLineForEMA.map(val => ({ close: val }));
+    // Calculate D line (using SMA of K line for robustness)
+    const dValues = calcSMA(stochasticResult.kLine, dPeriod); 
     
-    const dValues = calcEMA(kLineForEMAObjects, dPeriod); 
-
-    // Copy valid dLine values to result, ensuring correct alignment
-    const firstValidKLineIdx = stochasticResult.kLine.findIndex(val => Number.isFinite(val));
-
-    if (firstValidKLineIdx !== -1 && dValues.length > 0) {
-        let dDestIdx = firstValidKLineIdx + dPeriod - 1;
-        for (let srcIdx = 0; srcIdx < dValues.length; srcIdx++) {
-            if (dDestIdx < closes.length) { // Ensure we don't go out of bounds
-                stochasticResult.dLine[dDestIdx] = dValues[srcIdx];
-                dDestIdx++;
-            } else {
-                break;
-            }
+    // Copy valid dLine values to result
+    for(let i = 0; i < closes.length; i++) {
+        if (Number.isFinite(dValues[i])) {
+            stochasticResult.dLine[i] = dValues[i];
+        } else {
+            stochasticResult.dLine[i] = NaN;
         }
     }
     
