@@ -290,28 +290,40 @@
     }
 
 
-    // --- 2. Momentum Indicators (Medium-High Weight) ---
-    // 5m MACD Crossover
-    // macdLine and signalLine arrays must have enough valid values at their end for this to work
-    if (latestMACD5m > latestMACDSignal5m && (macdObj5m.macdLine.length > 1 && macdObj5m.signalLine.length > 1 && macdObj5m.macdLine[macdObj5m.macdLine.length - 2] < macdObj5m.signalLine[macdObj5m.signalLine.length - 2])) {
-        addScore(true, 15, "5M MACD Bull Cross");
-    } else if (latestMACD5m < latestMACDSignal5m && (macdObj5m.macdLine.length > 1 && macdObj5m.signalLine.length > 1 && macdObj5m.macdLine[macdObj5m.macdLine.length - 2] > macdObj5m.signalLine[macdObj5m.signalLine.length - 2])) {
-        subtractScore(true, 15, "5M MACD Bear Cross");
+  // --- 2. Momentum Indicators (Medium-High Weight) ---
+    // 5m MACD Crossover (Corrected)
+    const prevMACD5m = getLastValidValue(macdObj5m.macdLine.slice(0, macdObj5m.macdLine.length - 1));
+    const prevMACDSignal5m = getLastValidValue(macdObj5m.signalLine.slice(0, macdObj5m.signalLine.length - 1));
+
+    if (Number.isFinite(prevMACD5m) && Number.isFinite(prevMACDSignal5m)) { // Check if we have valid previous values
+        if (latestMACD5m > latestMACDSignal5m && prevMACD5m < prevMACDSignal5m) {
+            addScore(true, 15, "5M MACD Bull Cross");
+        } else if (latestMACD5m < latestMACDSignal5m && prevMACD5m > prevMACDSignal5m) {
+            subtractScore(true, 15, "5M MACD Bear Cross");
+        }
     }
 
-    // 5m RSI Overbought/Oversold & Turn
-    if (latestRSI5m <= 30 && rsiArray5m.length > 1 && getLastValidValue(rsiArray5m.slice(0, rsiArray5m.length - 1)) > latestRSI5m) { // Oversold and turning up
+
+    // 5m RSI Overbought/Oversold & Turn (Your original logic was sound here)
+    if (latestRSI5m <= 30 && rsiArray5m.length > 1 && getLastValidValue(rsiArray5m.slice(0, rsiArray5m.length - 1)) > latestRSI5m) { 
         addScore(true, 10, "5M RSI Oversold Reversal");
-    } else if (latestRSI5m >= 70 && rsiArray5m.length > 1 && getLastValidValue(rsiArray5m.slice(0, rsiArray5m.length - 1)) < latestRSI5m) { // Overbought and turning down
+    } else if (latestRSI5m >= 70 && rsiArray5m.length > 1 && getLastValidValue(rsiArray5m.slice(0, rsiArray5m.length - 1)) < latestRSI5m) { 
         subtractScore(true, 10, "5M RSI Overbought Reversal");
     }
 
-    // 5m Stochastic Crossover
-    if (latestStochK5m > latestStochD5m && stochasticObj5m.kLine.length > 1 && stochasticObj5m.dLine.length > 1 && getLastValidValue(stochasticObj5m.kLine.slice(0, stochasticObj5m.kLine.length - 1)) < getLastValidValue(stochasticObj5m.dLine.slice(0, stochasticObj5m.dLine.length - 1)) && latestStochK5m < 80) {
-        addScore(true, 8, "5M Stoch Bull Cross");
-    } else if (latestStochK5m < latestStochD5m && stochasticObj5m.kLine.length > 1 && stochasticObj5m.dLine.length > 1 && getLastValidValue(stochasticObj5m.kLine.slice(0, stochasticObj5m.kLine.length - 1)) > getLastValidValue(stochasticObj5m.dLine.slice(0, stochasticObj5m.dLine.length - 1)) && latestStochK5m > 20) {
-        subtractScore(true, 8, "5M Stoch Bear Cross");
+
+    // 5m Stochastic Crossover (Corrected)
+    const prevStochK5m = getLastValidValue(stochasticObj5m.kLine.slice(0, stochasticObj5m.kLine.length - 1));
+    const prevStochD5m = getLastValidValue(stochasticObj5m.dLine.slice(0, stochasticObj5m.dLine.length - 1));
+
+    if (Number.isFinite(prevStochK5m) && Number.isFinite(prevStochD5m)) { // Check if we have valid previous values
+        if (latestStochK5m > latestStochD5m && prevStochK5m < prevStochD5m && latestStochK5m < 80) {
+            addScore(true, 8, "5M Stoch Bull Cross");
+        } else if (latestStochK5m < latestStochD5m && prevStochK5m > prevStochD5m && latestStochK5m > 20) {
+            subtractScore(true, 8, "5M Stoch Bear Cross");
+        }
     }
+
 
     // --- 3. Volume & Volatility (Confirmation) ---
     // 5m OBV Trend Confirmation
@@ -332,21 +344,17 @@
     }
     
 
-    // --- 4. 1-Minute Entry Confluence (Crucial for minute trading) ---
-    // 1m EMA Alignment
-    if (latestEMA5_1m > latestEMA13_1m && latestEMA13_1m > latestEMA21_1m && currentPrice > latestEMA5_1m) {
-        addScore(true, 15, "1M EMA Bullish Entry");
-    } else if (latestEMA5_1m < latestEMA13_1m && latestEMA13_1m < latestEMA21_1m && currentPrice < latestEMA5_1m) {
-        subtractScore(true, 15, "1M EMA Bearish Entry");
+    // --- 4. 1-Minute Entry Confluence (Corrected) ---
+    const prevMACD1m = getLastValidValue(macdObj1m.macdLine.slice(0, macdObj1m.macdLine.length - 1));
+    const prevMACDSignal1m = getLastValidValue(macdObj1m.signalLine.slice(0, macdObj1m.signalLine.length - 1));
+    
+    if (Number.isFinite(prevMACD1m) && Number.isFinite(prevMACDSignal1m)) { // Check if we have valid previous values
+        if (latestMACD1m > latestMACDSignal1m && prevMACD1m < prevMACDSignal1m) {
+            addScore(true, 10, "1M MACD Bull Cross Entry");
+        } else if (latestMACD1m < latestMACDSignal1m && prevMACD1m > prevMACDSignal1m) {
+            subtractScore(true, 10, "1M MACD Bear Cross Entry");
+        }
     }
-
-    // 1m MACD Crossover
-    if (latestMACD1m > latestMACDSignal1m && (macdObj1m.macdLine.length > 1 && macdObj1m.signalLine.length > 1 && macdObj1m.macdLine[cleanCloses1m.length - 2] < macdObj1m.signalLine[cleanCloses1m.length - 2])) {
-        addScore(true, 10, "1M MACD Bull Cross Entry");
-    } else if (latestMACD1m < latestMACDSignal1m && (macdObj1m.macdLine.length > 1 && macdObj1m.signalLine.length > 1 && macdObj1m.macdLine[cleanCloses1m.length - 2] > macdObj1m.signalLine[cleanCloses1m.length - 2])) {
-        subtractScore(true, 10, "1M MACD Bear Cross Entry");
-    }
-
     // 1m RSI Oversold/Overbought
     if (latestRSI1m <= 25 && rsiArray1m.length > 1 && getLastValidValue(rsiArray1m.slice(0, rsiArray1m.length - 1)) > latestRSI1m) { 
         addScore(true, 8, "1M RSI Oversold Entry");
