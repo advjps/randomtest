@@ -123,7 +123,7 @@
 
   async function fetchBinanceDataWithFallback(symbol, timeframe) {
   // Changed limit to 200 for more data for indicators
-  const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${timeframe}&limit=400`; // Updated
+  const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${timeframe}&limit=100`; // Updated
   try { return await fetchBinanceData(url); }
   catch (err) {
     const proxyUrl = `https://cors-anywhere.herokuapp.com/${url}`;
