@@ -267,10 +267,13 @@
     };
 
     // --- 1. Core Trend & Price Action (High Weight) ---
-    if (latestEMA5_5m > latestEMA13_5m && latestEMA13_5m > latestEMA21_5m && latestEMA21_5m > latestEMA50_5m && currentPrice > latestEMA5_5m) {
-        addScore(true, 20, "5M Strong Bull Trend (EMA)");
-    } else if (latestEMA5_5m < latestEMA13_5m && latestEMA13_5m < latestEMA21_5m && latestEMA21_5m < latestEMA50_5m && currentPrice < latestEMA5_5m) {
-        subtractScore(true, 20, "5M Strong Bear Trend (EMA)");
+    // ADX check is implemented for strong trend signals
+    if (latestADX5m > 25) {
+        if (latestEMA5_5m > latestEMA13_5m && latestEMA13_5m > latestEMA21_5m && latestEMA21_5m > latestEMA50_5m && currentPrice > latestEMA5_5m) {
+            addScore(true, 20, "5M Strong Bull Trend (EMA)");
+        } else if (latestEMA5_5m < latestEMA13_5m && latestEMA13_5m < latestEMA21_5m && latestEMA21_5m < latestEMA50_5m && currentPrice < latestEMA5_5m) {
+            subtractScore(true, 20, "5M Strong Bear Trend (EMA)");
+        }
     }
 
     if (currentPrice > latestEMA50_5m) {
@@ -350,7 +353,7 @@
     }
 
     // --- Advanced / Confirmation Indicators (Lower Weight) ---
-    if (adx5m > 25) { 
+    if (latestADX5m > 25) { 
         addScore(true, 5, "5M ADX Strong Trend");
     }
     
@@ -366,9 +369,6 @@
     if (currentPrice > latestSAR5m) { addScore(true, 3, "5M Price Above SAR"); }
     else if (currentPrice < latestSAR5m) { subtractScore(true, 3, "5M Price Below SAR"); }
 
-    if (currentPrice > latestVWAP5m) { addScore(true, 3, "5M Price Above VWAP"); }
-    else if (currentPrice < latestVWAP5m) { subtractScore(true, 3, "5M Price Below VWAP"); }
-
     if (latestVolOsc5m > 0) { addScore(true, 2, "5M Volume Oscillator Bull"); }
     else if (latestVolOsc5m < 0) { subtractScore(true, 2, "5M Volume Oscillator Bear"); }
 
@@ -380,7 +380,7 @@
 
     const STRONG_BUY_THRESHOLD = 30; 
     const BUY_THRESHOLD = 15;      
-    const SELL_THRESHOLD = -30;    
+    const SELL_THRESHOLD = -25;    // TWEAK 1: Lowered to -25 based on backtesting
     const WEAK_SELL_THRESHOLD = -15; 
 
     if (totalScore >= STRONG_BUY_THRESHOLD) {
@@ -443,7 +443,7 @@
       histogram: Number.isFinite(macdObj5m.latest.histogram) ? macdObj5m.latest.histogram.toFixed(12) : 'NaN'
     };
 
-   return {
+    return {
       coin: symbol,
       price: currentPrice,
       tp: tp.toFixed(4),
