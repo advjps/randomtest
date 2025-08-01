@@ -378,9 +378,9 @@
     let signalType = "Neutral";
     let pop = 0; 
 
-    const STRONG_BUY_THRESHOLD = 30; 
+    const STRONG_BUY_THRESHOLD = 25; // TWEAK 1: Lowered from 30 to 25
     const BUY_THRESHOLD = 15;      
-    const SELL_THRESHOLD = -25;    // TWEAK 1: Lowered to -25 based on backtesting
+    const SELL_THRESHOLD = -25;    // TWEAK 2: Lowered from -30 to -25
     const WEAK_SELL_THRESHOLD = -15; 
 
     if (totalScore >= STRONG_BUY_THRESHOLD) {
