@@ -139,11 +139,9 @@
 
   function analyzeData(symbol, data5m, data1m) {
     // --- Data Extraction and Cleaning ---
-    // Safely get the current price from the latest 5m candle
     const currentPrice = data5m[data5m.length - 1]?.close; 
 
-    // Extract raw values from the fetched kline objects and filter for validity
-    // Ensuring these are declared at the very top of the function
+    // Extract raw values from the fetched kline objects
     const rawCloses5m = data5m.map(d => d.close);
     const rawHighs5m = data5m.map(d => d.high);
     const rawLows5m = data5m.map(d => d.low);
@@ -155,12 +153,9 @@
     const rawVolumes1m = data1m.map(d => d.volume);
 
     // --- Data Sufficiency Check ---
-    // Minimum data required for the longest period indicators
-    // (e.g., EMA50 needs 50, MACD's slow EMA needs 26, its signal line needs 9 more)
     const minDataRequired5m = 50; 
-    const minDataRequired1m = 26; // MACD (12, 26, 9) on 1m chart needs at least 26 candles
+    const minDataRequired1m = 26; 
 
-    // Check if raw data arrays have enough length and current price is valid
     if (!currentPrice || 
         rawCloses5m.length < minDataRequired5m || rawHighs5m.length < minDataRequired5m || rawLows5m.length < minDataRequired5m || rawVolumes5m.length < minDataRequired5m ||
         rawCloses1m.length < minDataRequired1m || rawHighs1m.length < minDataRequired1m || rawLows1m.length < minDataRequired1m || rawVolumes1m.length < minDataRequired1m) {
@@ -180,37 +175,43 @@
       };
     }
 
-    // --- Indicator Calculations (using your original indicator functions if not overridden, and my corrected ones) ---
-    // All indicator functions now receive the raw arrays directly. They are responsible for their own internal `Number.isFinite` checks.
+    // Filter raw data to ensure all values are finite numbers and positive (for prices/volume)
+    const cleanCloses5m = rawCloses5m.filter(v => Number.isFinite(v) && v > 0);
+    const cleanHighs5m = rawHighs5m.filter(v => Number.isFinite(v) && v > 0);
+    const cleanLows5m = rawLows5m.filter(v => Number.isFinite(v) && v > 0);
+    const cleanVolumes5m = rawVolumes5m.filter(v => Number.isFinite(v) && v >= 0);
 
-    // 5-minute indicators
-    const rsiArray5m = calcRSI(rawCloses5m, 14);
-    const macdObj5m = calcMACD(rawCloses5m, 12, 26, 9);
-    const ema5_5m_array = calcEMA(rawCloses5m, 5);
-    const ema13_5m_array = calcEMA(rawCloses5m, 13);
-    const ema21_5m_array = calcEMA(rawCloses5m, 21);
-    const ema50_5m_array = calcEMA(rawCloses5m, 50); 
-    const boll5m = calcBollinger(rawCloses5m, 20, 2); 
-    const atr5m = calcATR(rawHighs5m, rawLows5m, rawCloses5m, 14); 
-    const adx5m = calcADX(rawHighs5m, rawLows5m, rawCloses5m, 14); 
-    const stochasticObj5m = calcStochastic(rawHighs5m, rawLows5m, rawCloses5m, 14, 3);
-    const cci5m = calcCCI(rawHighs5m, rawLows5m, rawCloses5m, 20); 
-    const sar5m = calcSAR(rawHighs5m, rawLows5m, 0.02, 0.2); 
-    const vwap5m = calcVWAP(rawHighs5m, rawLows5m, rawCloses5m, rawVolumes5m); 
-    const obvArray5m = calcOBV(rawCloses5m, rawVolumes5m);
-    const ichimoku5m = calcIchimoku(rawCloses5m, rawHighs5m, rawLows5m, 9, 26); 
-    const volOsc5m = calcVolumeOscillator(rawVolumes5m, 5, 20); 
+    const cleanCloses1m = rawCloses1m.filter(v => Number.isFinite(v) && v > 0);
+    const cleanHighs1m = rawHighs1m.filter(v => Number.isFinite(v) && v > 0);
+    const cleanLows1m = rawLows1m.filter(v => Number.isFinite(v) && v > 0);
+    const cleanVolumes1m = rawVolumes1m.filter(v => Number.isFinite(v) && v >= 0);
 
-    // 1-minute indicators (for entry confirmation)
-    const ema5_1m_array = calcEMA(rawCloses1m, 5);
-    const ema13_1m_array = calcEMA(rawCloses1m, 13);
-    const ema21_1m_array = calcEMA(rawCloses1m, 21);
-    const rsiArray1m = calcRSI(rawCloses1m, 14);
-    const macdObj1m = calcMACD(rawCloses1m, 12, 26, 9);
-    const obvArray1m = calcOBV(rawCloses1m, rawVolumes1m);
+    // --- Indicator Calculations ---
+    const rsiArray5m = calcRSI(cleanCloses5m, 14);
+    const macdObj5m = calcMACD(cleanCloses5m, 12, 26, 9);
+    const ema5_5m_array = calcEMA(cleanCloses5m, 5);
+    const ema13_5m_array = calcEMA(cleanCloses5m, 13);
+    const ema21_5m_array = calcEMA(cleanCloses5m, 21);
+    const ema50_5m_array = calcEMA(cleanCloses5m, 50); 
+    const boll5m = calcBollinger(cleanCloses5m, 20, 2); 
+    const atr5m = calcATR(cleanHighs5m, cleanLows5m, cleanCloses5m, 14); 
+    const adx5m = calcADX(cleanHighs5m, cleanLows5m, cleanCloses5m, 14); 
+    const stochasticObj5m = calcStochastic(cleanHighs5m, cleanLows5m, cleanCloses5m, 14, 3);
+    const cci5m = calcCCI(cleanHighs5m, cleanLows5m, cleanCloses5m, 20); 
+    const sar5m = calcSAR(cleanHighs5m, cleanLows5m, 0.02, 0.2); 
+    const vwap5m = calcVWAP(cleanHighs5m, cleanLows5m, cleanCloses5m, cleanVolumes5m); 
+    const obvArray5m = calcOBV(cleanCloses5m, cleanVolumes5m);
+    const ichimoku5m = calcIchimoku(cleanCloses5m, cleanHighs5m, cleanLows5m, 9, 26); 
+    const volOsc5m = calcVolumeOscillator(cleanVolumes5m, 5, 20); 
+
+    const ema5_1m_array = calcEMA(cleanCloses1m, 5);
+    const ema13_1m_array = calcEMA(cleanCloses1m, 13);
+    const ema21_1m_array = calcEMA(cleanCloses1m, 21);
+    const rsiArray1m = calcRSI(cleanCloses1m, 14);
+    const macdObj1m = calcMACD(cleanCloses1m, 12, 26, 9);
+    const obvArray1m = calcOBV(cleanCloses1m, cleanVolumes1m);
 
     // --- Extract Latest Valid Values ---
-    // Use getLastValidValue for arrays, or .latest for indicator objects
     const latestRSI5m = getLastValidValue(rsiArray5m);
     const latestMACD5m = macdObj5m.latest.macd;
     const latestMACDSignal5m = macdObj5m.latest.signal;
@@ -244,16 +245,14 @@
     const latestOBV1m = getLastValidValue(obvArray1m);
 
     // --- Price Action & Structure (from 5-minute data) ---
-    // From last 10 candles for quick S/R. Used rawLows/Highs here.
-    const support5m = Math.min(...rawLows5m.slice(-10)); 
-    const resistance5m = Math.max(...rawHighs5m.slice(-10));
+    const support5m = Math.min(...cleanLows5m.slice(-10)); 
+    const resistance5m = Math.max(...cleanHighs5m.slice(-10));
 
     // --- Scoring System (Probability of Profit - POP) ---
     let buyScore = 0;
     let sellScore = 0;
-    const scoreDetails = []; // For debugging and analysis
+    const scoreDetails = []; 
 
-    // Helper to add points if condition is true and value is finite
     const addScore = (condition, points, detail) => {
         if (condition && Number.isFinite(points)) { 
             buyScore += points;
@@ -268,34 +267,27 @@
     };
 
     // --- 1. Core Trend & Price Action (High Weight) ---
-    // 5m EMA Alignment (Stronger trend signal)
     if (latestEMA5_5m > latestEMA13_5m && latestEMA13_5m > latestEMA21_5m && latestEMA21_5m > latestEMA50_5m && currentPrice > latestEMA5_5m) {
         addScore(true, 20, "5M Strong Bull Trend (EMA)");
     } else if (latestEMA5_5m < latestEMA13_5m && latestEMA13_5m < latestEMA21_5m && latestEMA21_5m < latestEMA50_5m && currentPrice < latestEMA5_5m) {
         subtractScore(true, 20, "5M Strong Bear Trend (EMA)");
     }
 
-    // 5m Price vs. Key EMA (Overall direction)
     if (currentPrice > latestEMA50_5m) {
         addScore(true, 10, "5M Price Above EMA50");
     } else if (currentPrice < latestEMA50_5m) {
         subtractScore(true, 10, "5M Price Below EMA50");
     }
-
-    // Approaching/Bouncing from 5m Support/Resistance (Requires more sophisticated S/R detection for higher accuracy)
-    if (currentPrice > support5m && currentPrice < support5m * 1.005) { // Price close to or just above support
+    if (currentPrice > support5m && currentPrice < support5m * 1.005) { 
         addScore(true, 5, "5M Near Support");
-    } else if (currentPrice < resistance5m && currentPrice > resistance5m * 0.995) { // Price close to or just below resistance
+    } else if (currentPrice < resistance5m && currentPrice > resistance5m * 0.995) { 
         subtractScore(true, 5, "5M Near Resistance");
     }
 
-
-  // --- 2. Momentum Indicators (Medium-High Weight) ---
-    // 5m MACD Crossover (Corrected)
+    // --- 2. Momentum Indicators (Medium-High Weight) ---
     const prevMACD5m = getLastValidValue(macdObj5m.macdLine.slice(0, macdObj5m.macdLine.length - 1));
     const prevMACDSignal5m = getLastValidValue(macdObj5m.signalLine.slice(0, macdObj5m.signalLine.length - 1));
-
-    if (Number.isFinite(prevMACD5m) && Number.isFinite(prevMACDSignal5m)) { // Check if we have valid previous values
+    if (Number.isFinite(prevMACD5m) && Number.isFinite(prevMACDSignal5m)) { 
         if (latestMACD5m > latestMACDSignal5m && prevMACD5m < prevMACDSignal5m) {
             addScore(true, 15, "5M MACD Bull Cross");
         } else if (latestMACD5m < latestMACDSignal5m && prevMACD5m > prevMACDSignal5m) {
@@ -303,20 +295,15 @@
         }
     }
 
-
-    // 5m RSI Overbought/Oversold & Turn (Your original logic was sound here)
     if (latestRSI5m <= 30 && rsiArray5m.length > 1 && getLastValidValue(rsiArray5m.slice(0, rsiArray5m.length - 1)) > latestRSI5m) { 
         addScore(true, 10, "5M RSI Oversold Reversal");
     } else if (latestRSI5m >= 70 && rsiArray5m.length > 1 && getLastValidValue(rsiArray5m.slice(0, rsiArray5m.length - 1)) < latestRSI5m) { 
         subtractScore(true, 10, "5M RSI Overbought Reversal");
     }
 
-
-    // 5m Stochastic Crossover (Corrected)
     const prevStochK5m = getLastValidValue(stochasticObj5m.kLine.slice(0, stochasticObj5m.kLine.length - 1));
     const prevStochD5m = getLastValidValue(stochasticObj5m.dLine.slice(0, stochasticObj5m.dLine.length - 1));
-
-    if (Number.isFinite(prevStochK5m) && Number.isFinite(prevStochD5m)) { // Check if we have valid previous values
+    if (Number.isFinite(prevStochK5m) && Number.isFinite(prevStochD5m)) { 
         if (latestStochK5m > latestStochD5m && prevStochK5m < prevStochD5m && latestStochK5m < 80) {
             addScore(true, 8, "5M Stoch Bull Cross");
         } else if (latestStochK5m < latestStochD5m && prevStochK5m > prevStochD5m && latestStochK5m > 20) {
@@ -324,10 +311,8 @@
         }
     }
 
-
     // --- 3. Volume & Volatility (Confirmation) ---
-    // 5m OBV Trend Confirmation
-    if (rawCloses5m.length > 1 && rawVolumes5m.length > 1) { // Ensure enough data for comparison
+    if (rawCloses5m.length > 1 && rawVolumes5m.length > 1) { 
         if (currentPrice > rawCloses5m[rawCloses5m.length - 2] && latestOBV5m > obvArray5m[obvArray5m.length - 2]) {
             addScore(true, 7, "5M OBV Confirms Up");
         } else if (currentPrice < rawCloses5m[rawCloses5m.length - 2] && latestOBV5m < obvArray5m[obvArray5m.length - 2]) {
@@ -335,27 +320,29 @@
         }
     }
     
-
-    // 5m Bollinger Bands (Price Reversion/Breakout)
     if (currentPrice <= latestBBLower5m && currentPrice > rawCloses5m[rawCloses5m.length - 2]) { 
         addScore(true, 10, "5M BB Lower Band Bounce");
     } else if (currentPrice >= latestBBUpper5m && currentPrice < rawCloses5m[rawCloses5m.length - 2]) { 
         subtractScore(true, 10, "5M BB Upper Band Bounce");
     }
-    
 
-    // --- 4. 1-Minute Entry Confluence (Corrected) ---
+    // --- 4. 1-Minute Entry Confluence (Crucial for minute trading) ---
+    if (latestEMA5_1m > latestEMA13_1m && latestEMA13_1m > latestEMA21_1m && currentPrice > latestEMA5_1m) {
+        addScore(true, 15, "1M EMA Bullish Entry");
+    } else if (latestEMA5_1m < latestEMA13_1m && latestEMA13_1m < latestEMA21_1m && currentPrice < latestEMA5_1m) {
+        subtractScore(true, 15, "1M EMA Bearish Entry");
+    }
+    
     const prevMACD1m = getLastValidValue(macdObj1m.macdLine.slice(0, macdObj1m.macdLine.length - 1));
     const prevMACDSignal1m = getLastValidValue(macdObj1m.signalLine.slice(0, macdObj1m.signalLine.length - 1));
-    
-    if (Number.isFinite(prevMACD1m) && Number.isFinite(prevMACDSignal1m)) { // Check if we have valid previous values
+    if (Number.isFinite(prevMACD1m) && Number.isFinite(prevMACDSignal1m)) { 
         if (latestMACD1m > latestMACDSignal1m && prevMACD1m < prevMACDSignal1m) {
             addScore(true, 10, "1M MACD Bull Cross Entry");
         } else if (latestMACD1m < latestMACDSignal1m && prevMACD1m > prevMACDSignal1m) {
             subtractScore(true, 10, "1M MACD Bear Cross Entry");
         }
     }
-    // 1m RSI Oversold/Overbought
+    
     if (latestRSI1m <= 25 && rsiArray1m.length > 1 && getLastValidValue(rsiArray1m.slice(0, rsiArray1m.length - 1)) > latestRSI1m) { 
         addScore(true, 8, "1M RSI Oversold Entry");
     } else if (latestRSI1m >= 75 && rsiArray1m.length > 1 && getLastValidValue(rsiArray1m.slice(0, rsiArray1m.length - 1)) < latestRSI1m) { 
@@ -363,12 +350,10 @@
     }
 
     // --- Advanced / Confirmation Indicators (Lower Weight) ---
-    // ADX only returns a single value, so we only check its current value against a threshold.
-    if (latestADX5m > 25) { 
+    if (adx5m > 25) { 
         addScore(true, 5, "5M ADX Strong Trend");
     }
-
-    // Ichimoku for Tenkan/Kijun cross (simplified as your calcIchimoku doesn't return Kumo color)
+    
     if (latestIchimokuTenkan5m > latestIchimokuKijun5m) {
         addScore(true, 5, "5M Ichimoku Tenkan/Kijun Bullish Cross");
     } else if (latestIchimokuTenkan5m < latestIchimokuKijun5m) {
@@ -393,7 +378,6 @@
     let signalType = "Neutral";
     let pop = 0; 
 
-    // Define the ranges for each signal type - THESE NEED BACKTESTING AND ADJUSTMENT
     const STRONG_BUY_THRESHOLD = 30; 
     const BUY_THRESHOLD = 15;      
     const SELL_THRESHOLD = -30;    
@@ -416,13 +400,11 @@
         pop = 50; 
     }
 
-
-// --- TP & SL (Based on ATR for Minute Trading) ---
+    // --- TP & SL (Based on ATR for Minute Trading) ---
     const tpFactor = 1.5; 
     const slFactor = 0.75; 
 
-    // Add a fallback for ATR if it's 0 or NaN
-    const effectiveATR = (Number.isFinite(latestATR5m) && latestATR5m > 0) ? latestATR5m : currentPrice * 0.002; // Fallback to 0.2% of price if ATR is invalid/zero
+    const effectiveATR = (Number.isFinite(latestATR5m) && latestATR5m > 0) ? latestATR5m : currentPrice * 0.002;
 
     let tp, sl;
     if (signalType.includes("Buy")) {
@@ -436,13 +418,10 @@
         sl = currentPrice * 0.995;
     }
 
-    // Sanity checks for TP/SL (ensure they are sensible and finite)
     if (!Number.isFinite(tp) || tp <= 0) tp = currentPrice * (signalType.includes("Buy") ? 1.01 : 0.99);
     if (!Number.isFinite(sl) || sl <= 0) sl = currentPrice * (signalType.includes("Buy") ? 0.99 : 1.01);
-    // Ensure SL is always below TP for buy and above TP for sell
     if (signalType.includes("Buy") && sl >= tp) sl = currentPrice * 0.99;
     if (signalType.includes("Sell") && sl <= tp) sl = currentPrice * 1.01;
-
 
     // --- Leverage & Estimated Profit ---
     let leverage = 5; 
@@ -450,24 +429,19 @@
     else if (pop >= 65) leverage = 7;
     else if (pop >= 50) leverage = 6;
 
-    if (latestATR5m > currentPrice * 0.005 && latestATR5m < currentPrice * 0.015) leverage = Math.min(leverage, 7); 
+    if (latestATR5m > currentPrice * 0.005 && latestATR5m < currentPrice * 0.015) leverage = Math.min(leverage, 7);
     else if (latestATR5m >= currentPrice * 0.015) leverage = 5; 
     else if (latestATR5m < currentPrice * 0.0005) leverage = Math.max(leverage, 6); 
 
-    const profitPct = (((tp - currentPrice) / currentPrice) * 100 * leverage).toFixed(2);
+    const profitPct = (((tp - currentPrice) / currentPrice) * 100 * leverage);
 
 
     // --- Final Return Object ---
-    // Format MACD for JSON (using .latest properties now)
-    
     const formattedMacdObj = {
       macd: Number.isFinite(macdObj5m.latest.macd) ? macdObj5m.latest.macd.toFixed(12) : 'NaN',
-      signal: Number.isFinite(macdObj5m.latest.signal) ? macdObj5m.latest.signal.toFixed(12) : 'NaN', // <-- This is key
+      signal: Number.isFinite(macdObj5m.latest.signal) ? macdObj5m.latest.signal.toFixed(12) : 'NaN',
       histogram: Number.isFinite(macdObj5m.latest.histogram) ? macdObj5m.latest.histogram.toFixed(12) : 'NaN'
     };
-
-    // Debug logging (updated to use latest values)
-    console.log(`Indicators for ${symbol}: price=${currentPrice.toFixed(4)}, rsi=${Number.isFinite(latestRSI5m) ? latestRSI5m.toFixed(2) : 'NaN'}, macd=${formattedMacdObj.macd}, signal=${formattedMacdObj.signal}, ema5_5m=${Number.isFinite(latestEMA5_5m) ? latestEMA5_5m.toFixed(8) : 'NaN'}, ema50_5m=${Number.isFinite(latestEMA50_5m) ? latestEMA50_5m.toFixed(8) : 'NaN'}, signal=${signalType}, pop=${pop}%, details=[${scoreDetails.join(', ')}]`);
 
     return {
       coin: symbol,
@@ -477,25 +451,25 @@
       leverage: leverage + "x",
       pop,
       rsi: Number.isFinite(latestRSI5m) ? latestRSI5m : 0, 
-      estimated_profit: profitPct + "%",
+      estimated_profit: (signalType.includes("Sell") ? Math.abs(profitPct) : profitPct).toFixed(2) + "%", // <-- FIX HERE
       signal: signalType,
-      // Pass all latest indicator values to the `indicators` object for raw data analysis
+      // Create a lighter return object for JSON output
       indicators: {
         rsi5m: latestRSI5m,
-        macd5m: macdObj5m.latest, 
+        macd5m: macdObj5m.latest,
         ema5_5m: latestEMA5_5m,
         ema13_5m: latestEMA13_5m,
         ema21_5m: latestEMA21_5m,
         ema50_5m: latestEMA50_5m,
-        boll5m: boll5m, 
+        boll5m: boll5m,
         atr5m: latestATR5m,
         adx5m: latestADX5m,
-        stoch5m: stochasticObj5m.latest, 
+        stoch5m: stochasticObj5m.latest,
         cci5m: latestCCI5m,
         sar5m: latestSAR5m,
         vwap5m: latestVWAP5m,
         obv5m: latestOBV5m,
-        ichimoku5m: ichimoku5m, 
+        ichimoku5m: ichimoku5m,
         volOsc5m: latestVolOsc5m,
         ema5_1m: latestEMA5_1m,
         ema13_1m: latestEMA13_1m,
@@ -503,28 +477,7 @@
         rsi1m: latestRSI1m,
         macd1m: macdObj1m.latest,
         obv1m: latestOBV1m,
-        // Also include the full indicator arrays for deeper analysis if needed in raw data
-        rawArrays: {
-            rsiArray5m: rsiArray5m,
-            macdLine5m: macdObj5m.macdLine,
-            signalLine5m: macdObj5m.signalLine,
-            histogram5m: macdObj5m.histogram,
-            ema5_5m_array: ema5_5m_array,
-            ema13_5m_array: ema13_5m_array,
-            ema21_5m_array: ema21_5m_array,
-            ema50_5m_array: ema50_5m_array,
-            stochKLine5m: stochasticObj5m.kLine,
-            stochDLine5m: stochasticObj5m.dLine,
-            obvArray5m: obvArray5m,
-            ema5_1m_array: ema5_1m_array,
-            ema13_1m_array: ema13_1m_array,
-            ema21_1m_array: ema21_1m_array,
-            rsiArray1m: rsiArray1m,
-            macdLine1m: macdObj1m.macdLine,
-            signalLine1m: macdObj1m.signalLine,
-            histogram1m: macdObj1m.histogram,
-            obvArray1m: obvArray1m
-        }
+        // The rawArrays object is now excluded to lighten the file size
       }
     };
   }
