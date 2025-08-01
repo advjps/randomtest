@@ -443,7 +443,7 @@
       histogram: Number.isFinite(macdObj5m.latest.histogram) ? macdObj5m.latest.histogram.toFixed(12) : 'NaN'
     };
 
-    return {
+   return {
       coin: symbol,
       price: currentPrice,
       tp: tp.toFixed(4),
@@ -451,7 +451,7 @@
       leverage: leverage + "x",
       pop,
       rsi: Number.isFinite(latestRSI5m) ? latestRSI5m : 0, 
-      estimated_profit: (signalType.includes("Sell") ? Math.abs(profitPct) : profitPct).toFixed(2) + "%", // <-- FIX HERE
+      estimated_profit: (signalType.includes("Sell") ? Math.abs(profitPct) : profitPct).toFixed(2) + "%",
       signal: signalType,
       // Create a lighter return object for JSON output
       indicators: {
@@ -477,7 +477,6 @@
         rsi1m: latestRSI1m,
         macd1m: macdObj1m.latest,
         obv1m: latestOBV1m,
-        // The rawArrays object is now excluded to lighten the file size
       }
     };
   }
