@@ -142,7 +142,7 @@
     return data.map(d => ({ open: +d[1], high: +d[2], low: +d[3], close: +d[4], volume: +d[5] }));
   }
 
-  function analyzeData(symbol, data5m, data1m) {
+    function analyzeData(symbol, data5m, data1m) {
     // --- Data Extraction and Cleaning ---
     const currentPrice = data5m[data5m.length - 1]?.close; 
 
@@ -208,6 +208,7 @@
     const obvArray5m = calcOBV(cleanCloses5m, cleanVolumes5m);
     const ichimoku5m = calcIchimoku(cleanCloses5m, cleanHighs5m, cleanLows5m, 9, 26); 
     const volOsc5m = calcVolumeOscillator(cleanVolumes5m, 5, 20); 
+    const volProfileScores = calcVolumeProfile(cleanCloses5m, cleanHighs5m, cleanLows5m, cleanVolumes5m);
 
     const ema5_1m_array = calcEMA(cleanCloses1m, 5);
     const ema13_1m_array = calcEMA(cleanCloses1m, 13);
@@ -239,6 +240,8 @@
     const latestIchimokuTenkan5m = ichimoku5m.tenkan;
     const latestIchimokuKijun5m = ichimoku5m.kijun;
     const latestVolOsc5m = volOsc5m; 
+    const latestVolProfileBull = volProfileScores.bullish_score; // New line
+    const latestVolProfileBear = volProfileScores.bearish_score; // New line
 
     const latestEMA5_1m = getLastValidValue(ema5_1m_array);
     const latestEMA13_1m = getLastValidValue(ema13_1m_array);
@@ -297,9 +300,9 @@
     const prevMACDSignal5m = getLastValidValue(macdObj5m.signalLine.slice(0, macdObj5m.signalLine.length - 1));
     if (Number.isFinite(prevMACD5m) && Number.isFinite(prevMACDSignal5m)) { 
         if (latestMACD5m > latestMACDSignal5m && prevMACD5m < prevMACDSignal5m) {
-            addScore(true, 15, "5M MACD Bull Cross");
+            addScore(true, 20, "5M MACD Bull Cross");
         } else if (latestMACD5m < latestMACDSignal5m && prevMACD5m > prevMACDSignal5m) {
-            subtractScore(true, 15, "5M MACD Bear Cross");
+            subtractScore(true, 20, "5M MACD Bear Cross");
         }
     }
 
@@ -383,9 +386,9 @@
     let signalType = "Neutral";
     let pop = 0; 
 
-    const STRONG_BUY_THRESHOLD = 25; // TWEAK 1: Lowered from 30 to 25
+    const STRONG_BUY_THRESHOLD = 25; 
     const BUY_THRESHOLD = 15;      
-    const SELL_THRESHOLD = -25;    // TWEAK 2: Lowered from -30 to -25
+    const SELL_THRESHOLD = -25;    
     const WEAK_SELL_THRESHOLD = -15; 
 
     if (totalScore >= STRONG_BUY_THRESHOLD) {
@@ -458,6 +461,10 @@
       rsi: Number.isFinite(latestRSI5m) ? latestRSI5m : 0, 
       estimated_profit: (signalType.includes("Sell") ? Math.abs(profitPct) : profitPct).toFixed(2) + "%",
       signal: signalType,
+      volProfile: {
+          bullish_score: latestVolProfileBull,
+          bearish_score: latestVolProfileBear
+      },
       // Create a lighter return object for JSON output
       indicators: {
         rsi5m: latestRSI5m,
@@ -485,6 +492,7 @@
       }
     };
   }
+
   // --- Replacement Indicator Functions ---
 
 // Helper function to get the last valid value from an array
@@ -1028,5 +1036,6 @@ function checkForDivergence(priceHighs, priceLows, indicatorValues, indicatorHig
 </script>
 </body>
 </html>
+
 
 
