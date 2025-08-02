@@ -331,18 +331,18 @@
 
     // --- 4. 1-Minute Entry Confluence (Crucial for minute trading) ---
     if (latestEMA5_1m > latestEMA13_1m && latestEMA13_1m > latestEMA21_1m && currentPrice > latestEMA5_1m) {
-        addScore(true, 15, "1M EMA Bullish Entry");
+        addScore(true, 20, "1M EMA Bullish Entry");
     } else if (latestEMA5_1m < latestEMA13_1m && latestEMA13_1m < latestEMA21_1m && currentPrice < latestEMA5_1m) {
-        subtractScore(true, 15, "1M EMA Bearish Entry");
+        subtractScore(true, 20, "1M EMA Bearish Entry");
     }
     
     const prevMACD1m = getLastValidValue(macdObj1m.macdLine.slice(0, macdObj1m.macdLine.length - 1));
     const prevMACDSignal1m = getLastValidValue(macdObj1m.signalLine.slice(0, macdObj1m.signalLine.length - 1));
     if (Number.isFinite(prevMACD1m) && Number.isFinite(prevMACDSignal1m)) { 
         if (latestMACD1m > latestMACDSignal1m && prevMACD1m < prevMACDSignal1m) {
-            addScore(true, 10, "1M MACD Bull Cross Entry");
+            addScore(true, 15, "1M MACD Bull Cross Entry");
         } else if (latestMACD1m < latestMACDSignal1m && prevMACD1m > prevMACDSignal1m) {
-            subtractScore(true, 10, "1M MACD Bear Cross Entry");
+            subtractScore(true, 15, "1M MACD Bear Cross Entry");
         }
     }
     
@@ -358,9 +358,9 @@
     }
     
     if (latestIchimokuTenkan5m > latestIchimokuKijun5m) {
-        addScore(true, 5, "5M Ichimoku Tenkan/Kijun Bullish Cross");
+        addScore(true, 10, "5M Ichimoku Tenkan/Kijun Bullish Cross");
     } else if (latestIchimokuTenkan5m < latestIchimokuKijun5m) {
-        subtractScore(true, 5, "5M Ichimoku Tenkan/Kijun Bearish Cross");
+        subtractScore(true, 10, "5M Ichimoku Tenkan/Kijun Bearish Cross");
     }
 
     if (latestCCI5m > 100) { addScore(true, 3, "5M CCI Strong Bull"); }
@@ -1023,3 +1023,4 @@ function checkForDivergence(priceHighs, priceLows, indicatorValues, indicatorHig
 </script>
 </body>
 </html>
+
