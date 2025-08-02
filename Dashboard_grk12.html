@@ -970,6 +970,68 @@ function checkForDivergence(priceHighs, priceLows, indicatorValues, indicatorHig
     return longEMA === 0 ? 0 : ((shortEMA - longEMA) / longEMA) * 100;
   }
 
+  // New Volume Profile function (more nuanced)
+function calcVolumeProfile(closes, highs, lows, volumes, numNodes = 10) {
+    if (!closes || !highs || !lows || !volumes || closes.length === 0 || volumes.length === 0) {
+        return { bullish_score: 0, bearish_score: 0 };
+    }
+
+    const prices = highs.concat(lows);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const priceRange = maxPrice - minPrice;
+    if (priceRange === 0) {
+        return { bullish_score: 0, bearish_score: 0 };
+    }
+    const nodeSize = priceRange / numNodes;
+
+    const volumeNodes = Array(numNodes).fill(0);
+    const nodePrices = Array(numNodes).fill(0);
+
+    for (let i = 0; i < numNodes; i++) {
+        nodePrices[i] = minPrice + (i * nodeSize);
+    }
+
+    for (let i = 0; i < highs.length; i++) {
+        const h = highs[i];
+        const l = lows[i];
+        const v = volumes[i];
+        const midPrice = (h + l) / 2;
+        const nodeIndex = Math.floor((midPrice - minPrice) / nodeSize);
+        if (nodeIndex >= 0 && nodeIndex < numNodes) {
+            volumeNodes[nodeIndex] += v;
+        }
+    }
+
+    const maxVolume = Math.max(...volumeNodes);
+    if (maxVolume === 0) {
+        return { bullish_score: 0, bearish_score: 0 };
+    }
+    const highVolumeNodeIndex = volumeNodes.findIndex(v => v === maxVolume);
+    const highVolumeNodePrice = nodePrices[highVolumeNodeIndex];
+    const currentPrice = closes[closes.length - 1];
+
+    let bullishScore = 0;
+    let bearishScore = 0;
+
+    // Logic for scoring:
+    // Bullish: Price is near or below the HVN (acting as support)
+    if (currentPrice >= highVolumeNodePrice * 0.995 && currentPrice <= highVolumeNodePrice * 1.005) {
+        bullishScore = Math.round((maxVolume > 0) ? (volumeNodes[highVolumeNodeIndex] / maxVolume) * 5 : 0);
+    } else if (currentPrice < highVolumeNodePrice) {
+        bullishScore = Math.round((maxVolume > 0) ? (volumeNodes[highVolumeNodeIndex] / maxVolume) * 3 : 0);
+    }
+
+    // Bearish: Price is near or above the HVN (acting as resistance)
+    if (currentPrice >= highVolumeNodePrice * 0.995 && currentPrice <= highVolumeNodePrice * 1.005) {
+        bearishScore = Math.round((maxVolume > 0) ? (volumeNodes[highVolumeNodeIndex] / maxVolume) * 5 : 0);
+    } else if (currentPrice > highVolumeNodePrice) {
+        bearishScore = Math.round((maxVolume > 0) ? (volumeNodes[highVolumeNodeIndex] / maxVolume) * 3 : 0);
+    }
+
+    return { bullish_score: bullishScore, bearish_score: bearishScore };
+    }
+
   function updateDashboard(filteredResults, allResults) {
     const sections = {
       "Strong Buy": document.getElementById('strong-buy-body'),
@@ -1036,6 +1098,7 @@ function checkForDivergence(priceHighs, priceLows, indicatorValues, indicatorHig
 </script>
 </body>
 </html>
+
 
 
 
