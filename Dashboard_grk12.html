@@ -99,13 +99,19 @@
     startSpinner(true);
     updateProgress(0);
 
+    // Fetch Bitcoin data first to determine market trend
+    const btcData5m = await fetchBinanceDataWithFallback('BTCUSDT', '5m');
+    const btcCloses5m = btcData5m.map(d => d.close);
+    const marketTrend = calcMarketTrend(btcCloses5m);
+
     let results = [];
     for (let i = 0; i < coins.length; i++) {
       const symbol = coins[i];
       try {
         const data5m = await fetchBinanceDataWithFallback(symbol, '5m');
         const data1m = await fetchBinanceDataWithFallback(symbol, '1m');
-        const analysis = analyzeData(symbol, data5m, data1m);
+        // Pass the market trend score to analyzeData
+        const analysis = analyzeData(symbol, data5m, data1m, marketTrend); 
         results.push(analysis);
       } catch (e) {
         console.error(`Error fetching ${symbol}:`, e);
@@ -969,7 +975,33 @@ function checkForDivergence(priceHighs, priceLows, indicatorValues, indicatorHig
     const longEMA = calcEMA(volumes, longPeriod);
     return longEMA === 0 ? 0 : ((shortEMA - longEMA) / longEMA) * 100;
   }
+  
+// New Market Trend function for Bitcoin
+function calcMarketTrend(closes) {
+    if (!closes || closes.length < 50) {
+        return 0; // Return 0 if not enough data for EMA50
+    }
+    const ema20 = getLastValidValue(calcEMA(closes, 20));
+    const ema50 = getLastValidValue(calcEMA(closes, 50));
+    const lastClose = closes[closes.length - 1];
 
+    if (!Number.isFinite(ema20) || !Number.isFinite(ema50) || !Number.isFinite(lastClose)) {
+        return 0;
+    }
+
+    if (ema20 > ema50 && lastClose > ema20) {
+        return 10; // Strong Bullish Trend
+    } else if (ema20 > ema50 && lastClose > ema50) {
+        return 5;  // Moderate Bullish Trend
+    } else if (ema20 < ema50 && lastClose < ema20) {
+        return -10; // Strong Bearish Trend
+    } else if (ema20 < ema50 && lastClose < ema50) {
+        return -5;  // Moderate Bearish Trend
+    } else {
+        return 0;  // Neutral or Choppy
+    }
+}
+  
   // New Volume Profile function (more nuanced)
 function calcVolumeProfile(closes, highs, lows, volumes, numNodes = 10) {
     if (!closes || !highs || !lows || !volumes || closes.length === 0 || volumes.length === 0) {
@@ -1124,6 +1156,7 @@ function calcVolumeProfile(closes, highs, lows, volumes, numNodes = 10) {
 </script>
 </body>
 </html>
+
 
 
 
