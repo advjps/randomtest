@@ -1032,7 +1032,7 @@ function calcVolumeProfile(closes, highs, lows, volumes, numNodes = 10) {
     return { bullish_score: bullishScore, bearish_score: bearishScore };
     }
 
-    function updateDashboard(filteredResults, allResults) {
+   function updateDashboard(filteredResults, allResults) {
     const sections = {
       "Strong Buy": document.getElementById('strong-buy-body'),
       "Strong Sell": document.getElementById('strong-sell-body')
@@ -1045,6 +1045,14 @@ function calcVolumeProfile(closes, highs, lows, volumes, numNodes = 10) {
     filteredResults.forEach(r => {
       if (sorted[r.signal]) sorted[r.signal].push(r);
     });
+
+    // Update the headers of the tables to include the Volume Profile score
+    document.getElementById('strong-buy-section').getElementsByTagName('thead')[0].innerHTML = `
+        <tr><th>Coin</th><th>Price</th><th>TP</th><th>SL</th><th>Leverage</th><th>POP</th><th>RSI</th><th>Vol Profile</th><th>Estimated Profit</th></tr>
+    `;
+    document.getElementById('strong-sell-section').getElementsByTagName('thead')[0].innerHTML = `
+        <tr><th>Coin</th><th>Price</th><th>TP</th><th>SL</th><th>Leverage</th><th>POP</th><th>RSI</th><th>Vol Profile</th><th>Estimated Profit</th></tr>
+    `;
 
     for (let key in sorted) {
       if (sorted[key].length > 0) {
@@ -1060,7 +1068,7 @@ function calcVolumeProfile(closes, highs, lows, volumes, numNodes = 10) {
           const topClass = index < 3 ? (key.includes("Sell") ? "top-pick-sell" : "top-pick") : "";
 
           // Get the Volume Profile score for the dashboard
-          const volProfileScore = (key.includes("Buy")) ? r.indicators.volProfile.bullish_score : r.indicators.volProfile.bearish_score;
+          const volProfileScore = (key.includes("Buy")) ? r.volProfile.bullish_score : r.volProfile.bearish_score;
           const volProfileClass = volProfileScore >= 4 ? 'pop-high' : (volProfileScore === 3 ? 'pop-medium' : 'pop-low');
           
           // Remove the negative sign for display in the dashboard table
@@ -1082,7 +1090,6 @@ function calcVolumeProfile(closes, highs, lows, volumes, numNodes = 10) {
       }
     }
   }
-
   function updateRawData(results) {
     document.getElementById('raw-data').value = JSON.stringify(results, null, 2);
   }
@@ -1117,6 +1124,7 @@ function calcVolumeProfile(closes, highs, lows, volumes, numNodes = 10) {
 </script>
 </body>
 </html>
+
 
 
 
