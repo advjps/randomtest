@@ -1032,11 +1032,13 @@ function calcVolumeProfile(closes, highs, lows, volumes, numNodes = 10) {
     return { bullish_score: bullishScore, bearish_score: bearishScore };
     }
 
-  function updateDashboard(filteredResults, allResults) {
+    function updateDashboard(filteredResults, allResults) {
     const sections = {
       "Strong Buy": document.getElementById('strong-buy-body'),
       "Strong Sell": document.getElementById('strong-sell-body')
     };
+
+    // Clear existing rows in both tables
     Object.values(sections).forEach(body => body.innerHTML = '');
 
     const sorted = { "Strong Buy": [], "Strong Sell": [] };
@@ -1045,22 +1047,39 @@ function calcVolumeProfile(closes, highs, lows, volumes, numNodes = 10) {
     });
 
     for (let key in sorted) {
-      sorted[key].sort((a, b) => parseFloat(b.estimated_profit) - parseFloat(a.estimated_profit));
-      sorted[key].forEach((r, index) => {
-        const popClass = r.pop >= 70 ? 'pop-high' : (r.pop >= 50 ? 'pop-medium' : 'pop-low');
-        const topClass = index < 3 ? (key.includes("Sell") ? "top-pick-sell" : "top-pick") : "";
-        const row = `<tr class="${topClass}">
-          <td>${r.coin.replace('USDT','')}</td>
-          <td>$${r.price.toFixed(4)}</td>
-          <td>${r.tp}</td>
-          <td>${r.sl}</td>
-          <td>${r.leverage}</td>
-          <td class="${popClass}">${r.pop}%</td>
-          <td>${r.rsi.toFixed(2)}</td>
-          <td class="bold">${r.estimated_profit}</td>
-        </tr>`;
-        sections[key].innerHTML += row;
-      });
+      if (sorted[key].length > 0) {
+        // Sort by absolute value of profit for cleaner dashboard display
+        sorted[key].sort((a, b) => {
+            const profitA = parseFloat(a.estimated_profit.replace('%', ''));
+            const profitB = parseFloat(b.estimated_profit.replace('%', ''));
+            return Math.abs(profitB) - Math.abs(profitA);
+        });
+        
+        sorted[key].forEach((r, index) => {
+          const popClass = r.pop >= 70 ? 'pop-high' : (r.pop >= 50 ? 'pop-medium' : 'pop-low');
+          const topClass = index < 3 ? (key.includes("Sell") ? "top-pick-sell" : "top-pick") : "";
+
+          // Get the Volume Profile score for the dashboard
+          const volProfileScore = (key.includes("Buy")) ? r.indicators.volProfile.bullish_score : r.indicators.volProfile.bearish_score;
+          const volProfileClass = volProfileScore >= 4 ? 'pop-high' : (volProfileScore === 3 ? 'pop-medium' : 'pop-low');
+          
+          // Remove the negative sign for display in the dashboard table
+          const displayProfit = r.estimated_profit.replace('-', '');
+
+          const row = `<tr class="${topClass}">
+            <td>${r.coin.replace('USDT','')}</td>
+            <td>$${r.price.toFixed(4)}</td>
+            <td>${r.tp}</td>
+            <td>${r.sl}</td>
+            <td>${r.leverage}</td>
+            <td class="${popClass}">${r.pop}%</td>
+            <td>${r.rsi.toFixed(2)}</td>
+            <td class="${volProfileClass}">${volProfileScore}</td>
+            <td class="bold">${displayProfit}</td>
+          </tr>`;
+          sections[key].innerHTML += row;
+        });
+      }
     }
   }
 
@@ -1098,6 +1117,7 @@ function calcVolumeProfile(closes, highs, lows, volumes, numNodes = 10) {
 </script>
 </body>
 </html>
+
 
 
 
