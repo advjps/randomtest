@@ -113,7 +113,12 @@
       updateProgress(((i+1) / coins.length) * 100);
     }
 
-    const filteredResults = results.filter(r => r.signal === "Strong Buy" || r.signal === "Strong Sell");
+    // Filter results to show only Strong Buy/Sell with at least 4% Estimated Profit
+    const filteredResults = results.filter(r => 
+        (r.signal === "Strong Buy" || r.signal === "Strong Sell") &&
+        parseFloat(r.estimated_profit) >= 4
+    );
+
     updateDashboard(filteredResults, results);
     updateRawData(results);
     document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
@@ -1023,4 +1028,5 @@ function checkForDivergence(priceHighs, priceLows, indicatorValues, indicatorHig
 </script>
 </body>
 </html>
+
 
