@@ -99,38 +99,52 @@
     startSpinner(true);
     updateProgress(0);
 
-    // Fetch Bitcoin data first to determine market trend
+    // Fetch Bitcoin data separately first
     const btcData5m = await fetchBinanceDataWithFallback('BTCUSDT', '5m');
     const btcCloses5m = btcData5m.map(d => d.close);
     const marketTrend = calcMarketTrend(btcCloses5m);
 
-    let results = [];
-    for (let i = 0; i < coins.length; i++) {
-      const symbol = coins[i];
-      try {
-        const data5m = await fetchBinanceDataWithFallback(symbol, '5m');
-        const data1m = await fetchBinanceDataWithFallback(symbol, '1m');
-        // Pass the market trend score to analyzeData
-        const analysis = analyzeData(symbol, data5m, data1m, marketTrend); 
-        results.push(analysis);
-      } catch (e) {
-        console.error(`Error fetching ${symbol}:`, e);
-      }
-      updateProgress(((i+1) / coins.length) * 100);
-    }
+    // Create an array of promises for fetching all coins
+    const coinPromises = coins.map(symbol =>
+        Promise.all([
+            fetchBinanceDataWithFallback(symbol, '5m'),
+            fetchBinanceDataWithFallback(symbol, '1m')
+        ])
+        .then(([data5m, data1m]) => {
+            // Pass the market trend score to analyzeData
+            const analysis = analyzeData(symbol, data5m, data1m, marketTrend); 
+            return analysis;
+        })
+        .catch(e => {
+            console.error(`Error fetching ${symbol}:`, e);
+            return {
+                coin: symbol,
+                price: 0, tp: "0.0000", sl: "0.0000", leverage: "5x", pop: 0, rsi: 0,
+                estimated_profit: "0.00%", signal: "Neutral", indicators: {}
+            };
+        })
+    );
+    
+    // Use Promise.allSettled to wait for all promises to either succeed or fail
+    const results = await Promise.allSettled(coinPromises);
+    
+    // Filter out rejected promises and get the successful results
+    const successfulResults = results
+        .filter(result => result.status === 'fulfilled')
+        .map(result => result.value);
 
     // Filter results to show only Strong Buy/Sell with at least 4% Estimated Profit
-    const filteredResults = results.filter(r => 
+    const filteredResults = successfulResults.filter(r => 
         (r.signal === "Strong Buy" || r.signal === "Strong Sell") &&
         parseFloat(r.estimated_profit) >= 4
     );
 
-    updateDashboard(filteredResults, results);
-    updateRawData(results);
+    updateDashboard(filteredResults, successfulResults);
+    updateRawData(successfulResults);
     document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
     startSpinner(false);
     startCountdown(300);
-  }
+}
 
   async function fetchBinanceDataWithFallback(symbol, timeframe) {
   // Changed limit to 200 for more data for indicators
@@ -1161,6 +1175,7 @@ function calcVolumeProfile(closes, highs, lows, volumes, numNodes = 10) {
 </script>
 </body>
 </html>
+
 
 
 
