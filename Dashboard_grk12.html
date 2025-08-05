@@ -95,39 +95,21 @@
   });
 
   async function fetchTopVolumeCoins() {
-    // Get all USDT pairs first
-    const allTickersUrl = 'https://api.binance.com/api/v3/ticker/24hr';
+    const futuresTickersUrl = 'https://fapi.binance.com/fapi/v1/ticker/24hr';
     try {
-        const allTickersResponse = await fetch(allTickersUrl);
-        const allTickersData = await allTickersResponse.json();
-        const allUsdtPairs = allTickersData.filter(ticker => ticker.symbol.endsWith('USDT') && !ticker.symbol.includes('DOWN') && !ticker.symbol.includes('UP'));
-        const allSymbols = allUsdtPairs.map(ticker => ticker.symbol);
-
-        const volumes = {};
-        const promises = allSymbols.map(async symbol => {
-            const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=4`; // Fetch last 4 hours of data
-            try {
-                const response = await fetch(url);
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const data = await response.json();
-                const totalVolume = data.reduce((sum, kline) => sum + parseFloat(kline[5]), 0);
-                volumes[symbol] = totalVolume;
-            } catch (e) {
-                console.error(`Error fetching volume for ${symbol}:`, e);
-                volumes[symbol] = 0; // Default to 0 on failure
-            }
-        });
-
-        await Promise.allSettled(promises);
-
-        const sortedCoins = Object.entries(volumes)
-            .sort(([, volumeA], [, volumeB]) => volumeB - volumeA)
-            .slice(0, 70)
-            .map(([symbol]) => symbol);
-
-        return sortedCoins;
+        const response = await fetch(futuresTickersUrl);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        
+        // Filter for USDT perpetual contracts and sort by quote volume
+        const usdtPairs = data.filter(ticker => ticker.symbol.endsWith('USDT') && ticker.symbol.includes('PERP')).sort((a, b) => b.quoteVolume - a.quoteVolume);
+        
+        // Return the top 70 symbols
+        return usdtPairs.slice(0, 70).map(ticker => ticker.symbol);
     } catch (e) {
-        console.error("Error fetching top coins list:", e); // New console.log here
+        console.error("Error fetching top coins:", e);
         // Return a default list in case of failure
         return [
             'BTCUSDT','ETHUSDT','DOGEUSDT','SOLUSDT','XRPUSDT','GALAUSDT','CFXUSDT','PEPEUSDT','ENAUSDT','PNUTUSDT',
@@ -135,7 +117,7 @@
             'WIFUSDT','AAVEUSDT'
         ];
     }
-  }
+}
 
   async function fetchData() {
     clearInterval(countdownInterval);
@@ -1223,6 +1205,7 @@ function calcVolumeProfile(closes, highs, lows, volumes, numNodes = 10) {
 </script>
 </body>
 </html>
+
 
 
 
