@@ -94,10 +94,58 @@
     link.click();
   });
 
+  async function fetchTopVolumeCoins() {
+    // Get all USDT pairs first
+    const allTickersUrl = 'https://api.binance.com/api/v3/ticker/24hr';
+    try {
+        const allTickersResponse = await fetch(allTickersUrl);
+        const allTickersData = await allTickersResponse.json();
+        const allUsdtPairs = allTickersData.filter(ticker => ticker.symbol.endsWith('USDT') && !ticker.symbol.includes('DOWN') && !ticker.symbol.includes('UP'));
+        const allSymbols = allUsdtPairs.map(ticker => ticker.symbol);
+
+        const volumes = {};
+        const promises = allSymbols.map(async symbol => {
+            const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=4`; // Fetch last 4 hours of data
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                const totalVolume = data.reduce((sum, kline) => sum + parseFloat(kline[5]), 0);
+                volumes[symbol] = totalVolume;
+            } catch (e) {
+                console.error(`Error fetching volume for ${symbol}:`, e);
+                volumes[symbol] = 0; // Default to 0 on failure
+            }
+        });
+
+        await Promise.allSettled(promises);
+
+        const sortedCoins = Object.entries(volumes)
+            .sort(([, volumeA], [, volumeB]) => volumeB - volumeA)
+            .slice(0, 70)
+            .map(([symbol]) => symbol);
+
+        return sortedCoins;
+    } catch (e) {
+        console.error("Error fetching top coins list:", e); // New console.log here
+        // Return a default list in case of failure
+        return [
+            'BTCUSDT','ETHUSDT','DOGEUSDT','SOLUSDT','XRPUSDT','GALAUSDT','CFXUSDT','PEPEUSDT','ENAUSDT','PNUTUSDT',
+            'REZUSDT','SHIBUSDT','ETCUSDT','HBARUSDT','CKBUSDT','ARBUSDT','WLDUSDT','UNIUSDT','AVAXUSDT','XLMUSDT',
+            'WIFUSDT','AAVEUSDT'
+        ];
+    }
+  }
+
   async function fetchData() {
     clearInterval(countdownInterval);
     startSpinner(true);
     updateProgress(0);
+
+    // Get the dynamic list of top coins
+    const dynamicCoins = await fetchTopVolumeCoins();
+    // Use this dynamic list for the rest of the function
+    const coinsToAnalyze = dynamicCoins.length > 0 ? dynamicCoins : coins;
 
     // Fetch Bitcoin data separately first
     const btcData5m = await fetchBinanceDataWithFallback('BTCUSDT', '5m');
@@ -105,7 +153,7 @@
     const marketTrend = calcMarketTrend(btcCloses5m);
 
     // Create an array of promises for fetching all coins
-    const coinPromises = coins.map(symbol =>
+    const coinPromises = coinsToAnalyze.map(symbol =>
         Promise.all([
             fetchBinanceDataWithFallback(symbol, '5m'),
             fetchBinanceDataWithFallback(symbol, '1m')
@@ -1175,6 +1223,7 @@ function calcVolumeProfile(closes, highs, lows, volumes, numNodes = 10) {
 </script>
 </body>
 </html>
+
 
 
 
