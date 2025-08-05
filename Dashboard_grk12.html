@@ -104,10 +104,10 @@
         const data = await response.json();
         
         // Filter for USDT perpetual contracts and sort by quote volume
-        const usdtPairs = data.filter(ticker => ticker.symbol.endsWith('USDT') && ticker.symbol.includes('PERP')).sort((a, b) => b.quoteVolume - a.quoteVolume);
+        const usdtPairs = data.filter(ticker => ticker.symbol.endsWith('USDT')).sort((a, b) => b.quoteVolume - a.quoteVolume);
         
         // Return the top 70 symbols, removing the _PERP suffix
-        return usdtPairs.slice(0, 70).map(ticker => ticker.symbol.replace('_PERP', ''));
+        return usdtPairs.slice(0, 70).map(ticker => ticker.symbol);
     } catch (e) {
         console.error("Error fetching top coins:", e);
         // Return a default list in case of failure
@@ -1205,6 +1205,7 @@ function calcVolumeProfile(closes, highs, lows, volumes, numNodes = 10) {
 </script>
 </body>
 </html>
+
 
 
 
