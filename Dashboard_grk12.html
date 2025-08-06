@@ -95,19 +95,38 @@
   });
 
   async function fetchTopVolumeCoins() {
+    const exchangeInfoUrl = 'https://fapi.binance.com/fapi/v1/exchangeInfo';
     const futuresTickersUrl = 'https://fapi.binance.com/fapi/v1/ticker/24hr';
+    
     try {
+        // Step 1: Get a list of all active symbols from exchange info
+        const exchangeInfoResponse = await fetch(exchangeInfoUrl);
+        if (!exchangeInfoResponse.ok) {
+            throw new Error(`HTTP error! status: ${exchangeInfoResponse.status}`);
+        }
+        const exchangeInfoData = await exchangeInfoResponse.json();
+        const activeSymbols = new Set(exchangeInfoData.symbols
+            .filter(s => s.status === 'TRADING' && s.contractType === 'PERPETUAL')
+            .map(s => s.symbol));
+
+        // Step 2: Get all tickers and filter for active ones
         const response = await fetch(futuresTickersUrl);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
         
-        // Filter for USDT perpetual contracts and sort by quote volume
-        const usdtPairs = data.filter(ticker => ticker.symbol.endsWith('USDT')).sort((a, b) => b.quoteVolume - a.quoteVolume);
-        
-        // Return the top 70 symbols, removing the _PERP suffix
-        return usdtPairs.slice(0, 70).map(ticker => ticker.symbol);
+        const tradableUsdtPairs = data.filter(ticker => 
+            ticker.symbol.endsWith('USDT') && activeSymbols.has(ticker.symbol)
+        );
+
+        // Sort by quote volume and return the top 70 symbols
+        const sortedCoins = tradableUsdtPairs
+            .sort((a, b) => b.quoteVolume - a.quoteVolume)
+            .slice(0, 70)
+            .map(ticker => ticker.symbol);
+
+        return sortedCoins;
     } catch (e) {
         console.error("Error fetching top coins:", e);
         // Return a default list in case of failure
@@ -1205,6 +1224,7 @@ function calcVolumeProfile(closes, highs, lows, volumes, numNodes = 10) {
 </script>
 </body>
 </html>
+
 
 
 
