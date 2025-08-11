@@ -212,101 +212,79 @@
   }
 
    function analyzeData(symbol, data5m, data1m, marketTrend) {
-    // --- Data Extraction and Cleaning ---
-    const currentPrice = data5m[data5m.length - 1]?.close; 
-    const rawCloses5m = data5m.map(d => d.close);
-    const rawHighs5m = data5m.map(d => d.high);
-    const rawLows5m = data5m.map(d => d.low);
-    const rawVolumes5m = data5m.map(d => d.volume);
-
-    const minDataRequired5m = 50; 
-    if (!currentPrice || rawCloses5m.length < minDataRequired5m) {
-      console.warn(`Insufficient raw data for ${symbol}.`);
-      return { coin: symbol, price: currentPrice || 0, signal: "Neutral", pop: 0, indicators: {} };
+    // --- Data Extraction & Indicator Calculation ---
+    const currentPrice = data5m[data5m.length - 1]?.close;
+    if (!currentPrice || data5m.length < 50) {
+      return { coin: symbol, signal: "Neutral" }; // Exit early if insufficient data
     }
 
-    const cleanCloses5m = rawCloses5m.filter(v => Number.isFinite(v) && v > 0);
-    const cleanHighs5m = rawHighs5m.filter(v => Number.isFinite(v) && v > 0);
-    const cleanLows5m = rawLows5m.filter(v => Number.isFinite(v) && v > 0);
-    const cleanVolumes5m = rawVolumes5m.filter(v => Number.isFinite(v) && v >= 0);
+    const closes = data5m.map(d => d.close).filter(v => Number.isFinite(v));
+    const highs = data5m.map(d => d.high).filter(v => Number.isFinite(v));
+    const lows = data5m.map(d => d.low).filter(v => Number.isFinite(v));
+    const volumes = data5m.map(d => d.volume).filter(v => Number.isFinite(v));
 
-    // --- Indicator Calculations ---
-    const rsiArray5m = calcRSI(cleanCloses5m, 14);
-    const macdObj5m = calcMACD(cleanCloses5m, 12, 26, 9);
-    const boll5m = calcBollinger(cleanCloses5m, 20, 2); 
-    const atr5m = calcATR(cleanHighs5m, cleanLows5m, cleanCloses5m, 14);
-    const cci5m = calcCCI(cleanHighs5m, cleanLows5m, cleanCloses5m, 20); 
-    const volProfileScores = calcVolumeProfile(cleanCloses5m, cleanHighs5m, cleanLows5m, cleanVolumes5m);
-    const ema50_5m_array = calcEMA(cleanCloses5m, 50);
-    const adx5m = calcADX(cleanHighs5m, cleanLows5m, cleanCloses5m, 14); 
+    // Calculate only the indicators needed for the new strategy
+    const rsiArray = calcRSI(closes, 14);
+    const macdObj = calcMACD(closes, 12, 26, 9);
+    const boll = calcBollinger(closes, 20, 2);
+    const atr = calcATR(highs, lows, closes, 14);
+    const cci = calcCCI(highs, lows, closes, 20);
+    const volProfileScores = calcVolumeProfile(closes, highs, lows, volumes);
+    const ema50_array = calcEMA(closes, 50);
+    const adx = calcADX(highs, lows, closes, 14);
 
-    // --- Extract Latest Valid Values ---
-    const latestRSI5m = getLastValidValue(rsiArray5m);
-    const latestBBUpper5m = boll5m.upper;
-    const latestBBLower5m = boll5m.lower;
-    const latestCCI5m = cci5m;
-    const latestMACDHist5m = macdObj5m.latest.histogram;
-    const latestVolProfileBull = volProfileScores.bullish_score; 
-    const latestVolProfileBear = volProfileScores.bearish_score; 
-    const latestEMA50_5m = getLastValidValue(ema50_5m_array);
-    const latestADX5m = adx5m;
-
+    const latestRSI = getLastValidValue(rsiArray);
+    const latestBBUpper = boll.upper;
+    const latestBBLower = boll.lower;
+    const latestCCI = cci;
+    const latestMACDHist = macdObj.latest.histogram;
+    const latestVolProfileBull = volProfileScores.bullish_score;
+    const latestVolProfileBear = volProfileScores.bearish_score;
+    const latestEMA50 = getLastValidValue(ema50_array);
+    const latestADX = adx;
+    
     // ==================================================================
-    // ### NEW SCORING SYSTEM (VERSION 2.1 - MEAN REVERSION) ###
+    // ### SCORING SYSTEM V2.2 ('The 2nd Amendment') ###
     // ==================================================================
 
     let buyScore = 0;
     let sellScore = 0;
-    let vetoApplied = false; // Flag to track if a penalty was applied
+    let vetoApplied = false;
 
     // --- 1. CORE MEAN-REVERSION SCORING ---
-    if (currentPrice <= latestBBLower5m) { buyScore += 35; } 
-    if (latestRSI5m <= 30) { 
-        buyScore += 30; // High score for fully oversold
-    } else if (latestRSI5m > 30 && latestRSI5m <= 40) {
-        buyScore += 15; // Medium score for the "Low RSI Zone"
-    }
+    if (currentPrice <= latestBBLower) { buyScore += 35; }
+    if (latestRSI <= 30) { buyScore += 30; } 
+    else if (latestRSI > 30 && latestRSI <= 40) { buyScore += 15; }
+    if (latestCCI >= 100) { buyScore += 25; }
 
-    if (currentPrice >= latestBBUpper5m) { sellScore += 35; }
-    if (latestRSI5m >= 70) {
-        sellScore += 30; // High score for fully overbought
-    } else if (latestRSI5m < 70 && latestRSI5m >= 60) {
-        sellScore += 15; // Medium score for the "High RSI Zone"
-    }
-    
-    if (latestCCI5m <= -100) { sellScore += 25; }
-    if (latestCCI5m >= 100) { buyScore += 25; }            
-    
+    if (currentPrice >= latestBBUpper) { sellScore += 35; }
+    if (latestRSI >= 70) { sellScore += 30; } 
+    else if (latestRSI < 70 && latestRSI >= 60) { sellScore += 15; }
+    if (latestCCI <= -100) { sellScore += 25; }
+
     // --- 2. NEGLIGIBLE SCORES (for data tracking) ---
-    if (latestADX5m > 25) { buyScore += 1; sellScore += 1; }
-    if (currentPrice > latestEMA50_5m) { buyScore += 1; }
-    if (currentPrice < latestEMA50_5m) { sellScore += 1; }
+    if (latestADX > 25) { buyScore += 1; sellScore += 1; }
+    if (currentPrice > latestEMA50) { buyScore += 1; }
+    if (currentPrice < latestEMA50) { sellScore += 1; }
 
-    // --- 3. ADVANCED FILTERS AND VETOES ---
-    if (marketTrend <= -10) { 
-      buyScore = -999; // Hard VETO for buys
-      vetoApplied = true;
-    } else if (marketTrend >= 10) { 
-      sellScore = -999; // Hard VETO for sells
-      vetoApplied = true;
-    } else if (marketTrend <= -5) { 
-      sellScore += 15; 
-      buyScore -= 10;
-    } else if (marketTrend >= 5) { 
-      buyScore += 15; 
-      sellScore -= 10;
+    // --- 3. ADVANCED VETO FILTERS ---
+    if (marketTrend <= -10) { // Strongly Bearish Market
+      buyScore = -999; vetoApplied = true;
+    } else if (marketTrend >= 10) { // Strongly Bullish Market
+      sellScore = -999; vetoApplied = true;
+    } else if (marketTrend <= -5) { // Moderately Bearish
+      sellScore += 15; buyScore -= 10;
+    } else if (marketTrend >= 5) { // Moderately Bullish
+      buyScore += 15; sellScore -= 10;
     }
-    
+
     const volProfileScore = (buyScore > sellScore) ? latestVolProfileBull : latestVolProfileBear;
     if (volProfileScore === 0) {
-      buyScore -= 50;
-      sellScore -= 50;
-      vetoApplied = true;
+      buyScore -= 50; sellScore -= 50; vetoApplied = true;
     }
 
-    if (latestMACDHist5m > 0 && sellScore > buyScore) { 
-        sellScore -= 45; 
-        vetoApplied = true;
+    if (latestMACDHist > 0 && sellScore > buyScore) {
+      sellScore -= 45; vetoApplied = true;
     }
 
     // --- 4. FINAL SIGNAL DETERMINATION ---
@@ -314,56 +292,49 @@
     let signalType = "Neutral";
     let pop = 0;
 
-    const STRONG_BUY_THRESHOLD = 25; 
-    const STRONG_SELL_THRESHOLD = -25;    
+    const STRONG_BUY_THRESHOLD = 25;
+    const STRONG_SELL_THRESHOLD = -25;
 
-    if (totalScore >= STRONG_BUY_THRESHOLD) {
-        signalType = "Strong Buy";
-    } else if (totalScore <= STRONG_SELL_THRESHOLD) {
-        signalType = "Strong Sell";
-    } else if (totalScore > 0) {
-        signalType = "Buy";
-    } else if (totalScore < 0) {
-        signalType = "Sell";
-    }
-
-    // **NEW REFINEMENT**: Downgrade penalized signals from "Strong" status
-    if (vetoApplied && (signalType === "Strong Buy" || signalType === "Strong Sell")) {
+    if (totalScore >= STRONG_BUY_THRESHOLD) { signalType = "Strong Buy"; } 
+    else if (totalScore <= STRONG_SELL_THRESHOLD) { signalType = "Strong Sell"; } 
+    else if (totalScore > 0) { signalType = "Buy"; } 
+    else if (totalScore < 0) { signalType = "Sell"; }
+    
+    if (vetoApplied && (signalType.includes("Strong"))) {
         signalType = (signalType === "Strong Buy") ? "Buy" : "Sell";
     }
 
-    // Calculate POP score based on the final scores
-    if (signalType.includes("Buy")) {
-        pop = Math.min(100, Math.round((buyScore / (buyScore + sellScore || 1)) * 100));
-    } else if (signalType.includes("Sell")) {
-        pop = Math.min(100, Math.round((sellScore / (buyScore + sellScore || 1)) * 100));
-    } else {
-        pop = 50;
-    }
-
-    // TP & SL and Leverage Calculation (No changes here)
-    const tpFactor = 1.5; 
-    const slFactor = 0.75; 
-    const effectiveATR = (Number.isFinite(atr5m) && atr5m > 0) ? atr5m : currentPrice * 0.002;
+    // TP/SL and Leverage must be calculated before the final profit filter
+    let leverage = 5;
+    if (pop >= 80) leverage = 9; else if (pop >= 65) leverage = 7; else if (pop >= 50) leverage = 6;
+    
+    const effectiveATR = (Number.isFinite(atr) && atr > 0) ? atr : currentPrice * 0.002;
     let tp, sl;
     if (signalType.includes("Buy")) {
-        tp = currentPrice + (effectiveATR * tpFactor);
-        sl = currentPrice - (effectiveATR * slFactor);
+      tp = currentPrice + (effectiveATR * 1.5);
+      sl = currentPrice - (effectiveATR * 1.5); // Using new slFactor
     } else if (signalType.includes("Sell")) {
-        tp = currentPrice - (effectiveATR * tpFactor);
-        sl = currentPrice + (effectiveATR * slFactor);
-    } else { 
-        tp = currentPrice * 1.005;
-        sl = currentPrice * 0.995;
+      tp = currentPrice - (effectiveATR * 1.5);
+      sl = currentPrice + (effectiveATR * 1.5); // Using new slFactor
+    } else {
+      tp = currentPrice; sl = currentPrice;
+    }
+    const profitPct = Math.abs(((tp - currentPrice) / currentPrice) * 100 * leverage);
+
+    // --- 5. FINAL VETO FILTER BASED ON PROFIT % ---
+    if (profitPct > 7.0 && signalType.includes("Strong")) {
+      signalType = "Neutral"; // Veto the signal if estimated profit is too high
+    }
+
+    // Final POP calculation
+    if (signalType.includes("Buy")) {
+      pop = Math.min(100, Math.round((buyScore / (buyScore + Math.abs(sellScore) || 1)) * 100));
+    } else if (signalType.includes("Sell")) {
+      pop = Math.min(100, Math.round((sellScore / (Math.abs(buyScore) + sellScore || 1)) * 100));
+    } else {
+      pop = 50;
     }
     
-    let leverage = 5; 
-    if (pop >= 80) leverage = 9;
-    else if (pop >= 65) leverage = 7;
-    else if (pop >= 50) leverage = 6;
-    const profitPct = (((tp - currentPrice) / currentPrice) * 100 * leverage);
-
-    // --- Final Return Object ---
     return {
       coin: symbol,
       price: currentPrice,
@@ -371,22 +342,17 @@
       sl: sl.toFixed(4),
       leverage: leverage + "x",
       pop: pop < 0 ? 0 : pop,
-      rsi: Number.isFinite(latestRSI5m) ? latestRSI5m : 0, 
-      estimated_profit: (signalType.includes("Sell") ? Math.abs(profitPct) : profitPct).toFixed(2) + "%",
+      rsi: latestRSI,
+      estimated_profit: profitPct.toFixed(2) + "%",
       signal: signalType,
       volProfile: volProfileScores,
-      indicators: { 
-        rsi5m: latestRSI5m,
-        macd5m: macdObj5m.latest,
-        boll5m: boll5m,
-        cci5m: latestCCI5m,
-        volProfile: volProfileScores,
-        marketTrend: marketTrend,
-        ema50_5m: latestEMA50_5m,
-        adx5m: latestADX5m,
+      indicators: {
+        rsi5m: latestRSI, macd5m: macdObj.latest, boll5m: boll,
+        cci5m: latestCCI, marketTrend: marketTrend, volProfile: volProfileScores,
+        ema50_5m: latestEMA50, adx5m: latestADX,
       }
     };
-}
+  }
   
   // --- Replacement Indicator Functions ---
 
@@ -1045,6 +1011,7 @@ function calcVolumeProfile(closes, highs, lows, volumes, numNodes = 10) {
 </script>
 </body>
 </html>
+
 
 
 
