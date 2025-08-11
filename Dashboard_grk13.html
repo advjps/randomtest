@@ -211,22 +211,16 @@
     return data.map(d => ({ open: +d[1], high: +d[2], low: +d[3], close: +d[4], volume: +d[5] }));
   }
 
-    function analyzeData(symbol, data5m, data1m, marketTrend) {
-    // --- Data Extraction and Cleaning (No changes here) ---
+   function analyzeData(symbol, data5m, data1m, marketTrend) {
+    // --- Data Extraction and Cleaning ---
     const currentPrice = data5m[data5m.length - 1]?.close; 
     const rawCloses5m = data5m.map(d => d.close);
     const rawHighs5m = data5m.map(d => d.high);
     const rawLows5m = data5m.map(d => d.low);
     const rawVolumes5m = data5m.map(d => d.volume);
-    const rawCloses1m = data1m.map(d => d.close);
-    const rawHighs1m = data1m.map(d => d.high);
-    const rawLows1m = data1m.map(d => d.low);
-    const rawVolumes1m = data1m.map(d => d.volume);
 
     const minDataRequired5m = 50; 
-    const minDataRequired1m = 26; 
-
-    if (!currentPrice || rawCloses5m.length < minDataRequired5m || rawCloses1m.length < minDataRequired1m) {
+    if (!currentPrice || rawCloses5m.length < minDataRequired5m) {
       console.warn(`Insufficient raw data for ${symbol}.`);
       return { coin: symbol, price: currentPrice || 0, signal: "Neutral", pop: 0, indicators: {} };
     }
@@ -235,17 +229,14 @@
     const cleanHighs5m = rawHighs5m.filter(v => Number.isFinite(v) && v > 0);
     const cleanLows5m = rawLows5m.filter(v => Number.isFinite(v) && v > 0);
     const cleanVolumes5m = rawVolumes5m.filter(v => Number.isFinite(v) && v >= 0);
-    const cleanCloses1m = rawCloses1m.filter(v => Number.isFinite(v) && v > 0);
-    const cleanVolumes1m = rawVolumes1m.filter(v => Number.isFinite(v) && v >= 0);
 
-    // --- Indicator Calculations (No changes here) ---
+    // --- Indicator Calculations ---
     const rsiArray5m = calcRSI(cleanCloses5m, 14);
     const macdObj5m = calcMACD(cleanCloses5m, 12, 26, 9);
     const boll5m = calcBollinger(cleanCloses5m, 20, 2); 
     const atr5m = calcATR(cleanHighs5m, cleanLows5m, cleanCloses5m, 14);
     const cci5m = calcCCI(cleanHighs5m, cleanLows5m, cleanCloses5m, 20); 
     const volProfileScores = calcVolumeProfile(cleanCloses5m, cleanHighs5m, cleanLows5m, cleanVolumes5m);
-    // Negligible indicators that we still need to calculate
     const ema50_5m_array = calcEMA(cleanCloses5m, 50);
     const adx5m = calcADX(cleanHighs5m, cleanLows5m, cleanCloses5m, 14); 
 
@@ -257,98 +248,97 @@
     const latestMACDHist5m = macdObj5m.latest.histogram;
     const latestVolProfileBull = volProfileScores.bullish_score; 
     const latestVolProfileBear = volProfileScores.bearish_score; 
-    // Extract for negligible indicators
     const latestEMA50_5m = getLastValidValue(ema50_5m_array);
     const latestADX5m = adx5m;
 
-
     // ==================================================================
-    // ### NEW SCORING SYSTEM (VERSION 2.0 - MEAN REVERSION) ###
+    // ### NEW SCORING SYSTEM (VERSION 2.1 - MEAN REVERSION) ###
     // ==================================================================
 
     let buyScore = 0;
     let sellScore = 0;
+    let vetoApplied = false; // Flag to track if a penalty was applied
 
     // --- 1. CORE MEAN-REVERSION SCORING ---
-    // These are the high-performing indicators from our backtest.
+    if (currentPrice <= latestBBLower5m) { buyScore += 35; } 
+    if (latestRSI5m <= 30) { 
+        buyScore += 30; // High score for fully oversold
+    } else if (latestRSI5m > 30 && latestRSI5m <= 40) {
+        buyScore += 15; // Medium score for the "Low RSI Zone"
+    }
 
-    // High-Value BUY Signals (Reversal)
-    if (currentPrice <= latestBBLower5m) { buyScore += 35; } // 85.7% WR
-    if (latestRSI5m <= 30) { buyScore += 30; }               // 100% WR (small sample)
-
-    // High-Value SELL Signals (Reversal)
-    if (latestRSI5m >= 70) { sellScore += 30; }               // 63.3% WR
-    if (latestCCI5m <= -100) { sellScore += 25; }             // 65.2% WR
+    if (currentPrice >= latestBBUpper5m) { sellScore += 35; }
+    if (latestRSI5m >= 70) {
+        sellScore += 30; // High score for fully overbought
+    } else if (latestRSI5m < 70 && latestRSI5m >= 60) {
+        sellScore += 15; // Medium score for the "High RSI Zone"
+    }
+    
+    if (latestCCI5m <= -100) { sellScore += 25; }
+    if (latestCCI5m >= 100) { buyScore += 25; }            
     
     // --- 2. NEGLIGIBLE SCORES (for data tracking) ---
-    // These underperforming indicators get a score of 1 just to keep them in the report.
     if (latestADX5m > 25) { buyScore += 1; sellScore += 1; }
     if (currentPrice > latestEMA50_5m) { buyScore += 1; }
     if (currentPrice < latestEMA50_5m) { sellScore += 1; }
-    // Add other previously used indicators here with a score of 1 if you wish to track them.
-
 
     // --- 3. ADVANCED FILTERS AND VETOES ---
-    // This section applies our data-driven rules to improve signal quality.
-
-    // A. Tiered Market Trend Filter
-    if (marketTrend <= -10) { // Strongly Bearish: VETO ALL BUYS
-      // We don't return immediately, but we can crush the buyScore
-      buyScore = 0;
-      sellScore += 5; // Small bonus for aligning with strong trend
-    } else if (marketTrend >= 10) { // Strongly Bullish: VETO ALL SELLS
-      sellScore = 0;
-      buyScore += 5; // Small bonus
-    } else if (marketTrend <= -5) { // Moderately Bearish
-      sellScore += 15; // Bonus for sells
-      buyScore -= 10;  // Penalty for buys
-    } else if (marketTrend >= 5) { // Moderately Bullish
-      buyScore += 15;  // Bonus for buys
-      sellScore -= 10; // Penalty for sells
+    if (marketTrend <= -10) { 
+      buyScore = -999; // Hard VETO for buys
+      vetoApplied = true;
+    } else if (marketTrend >= 10) { 
+      sellScore = -999; // Hard VETO for sells
+      vetoApplied = true;
+    } else if (marketTrend <= -5) { 
+      sellScore += 15; 
+      buyScore -= 10;
+    } else if (marketTrend >= 5) { 
+      buyScore += 15; 
+      sellScore -= 10;
     }
     
-    // B. Vol Profile Veto (as a heavy penalty)
     const volProfileScore = (buyScore > sellScore) ? latestVolProfileBull : latestVolProfileBear;
     if (volProfileScore === 0) {
-      // Penalize both scores heavily, as Vol Profile 0 was unprofitable for buys and sells
       buyScore -= 50;
       sellScore -= 50;
+      vetoApplied = true;
     }
 
-    // C. Conflicting Signal Veto (5M MACD Bullish on a Sell)
-    if (latestMACDHist5m > 0 && sellScore > buyScore) { // If MACD is bullish on a potential sell signal
-        sellScore -= 45; // Apply aggressive penalty
+    if (latestMACDHist5m > 0 && sellScore > buyScore) { 
+        sellScore -= 45; 
+        vetoApplied = true;
     }
-    // We can add the reverse for buy signals if data supports it in the future
-    // if (latestMACDHist5m < 0 && buyScore > sellScore) { buyScore -= 45; }
-
 
     // --- 4. FINAL SIGNAL DETERMINATION ---
-    // This logic remains the same, but uses our new, smarter scores.
     const totalScore = buyScore - sellScore;
     let signalType = "Neutral";
     let pop = 0;
 
     const STRONG_BUY_THRESHOLD = 25; 
-    const BUY_THRESHOLD = 15;      
-    const SELL_THRESHOLD = -25;    
-    const WEAK_SELL_THRESHOLD = -15; 
+    const STRONG_SELL_THRESHOLD = -25;    
 
     if (totalScore >= STRONG_BUY_THRESHOLD) {
         signalType = "Strong Buy";
-        pop = Math.min(100, Math.round((buyScore / (buyScore + sellScore || 1)) * 100)); 
-    } else if (totalScore <= SELL_THRESHOLD) {
+    } else if (totalScore <= STRONG_SELL_THRESHOLD) {
         signalType = "Strong Sell";
-        pop = Math.min(100, Math.round((sellScore / (buyScore + sellScore || 1)) * 100)); 
-    } else if (totalScore >= BUY_THRESHOLD) {
+    } else if (totalScore > 0) {
         signalType = "Buy";
-        pop = Math.min(100, Math.round((buyScore / (buyScore + sellScore || 1)) * 100));
-    } else if (totalScore <= WEAK_SELL_THRESHOLD) {
+    } else if (totalScore < 0) {
         signalType = "Sell";
+    }
+
+    // **NEW REFINEMENT**: Downgrade penalized signals from "Strong" status
+    if (vetoApplied && (signalType === "Strong Buy" || signalType === "Strong Sell")) {
+        signalType = (signalType === "Strong Buy") ? "Buy" : "Sell";
+    }
+
+    // Calculate POP score based on the final scores
+    if (signalType.includes("Buy")) {
+        pop = Math.min(100, Math.round((buyScore / (buyScore + sellScore || 1)) * 100));
+    } else if (signalType.includes("Sell")) {
         pop = Math.min(100, Math.round((sellScore / (buyScore + sellScore || 1)) * 100));
     } else {
-        signalType = "Neutral";
-        pop = 50; 
+        pop = 50;
     }
 
     // TP & SL and Leverage Calculation (No changes here)
@@ -380,25 +370,23 @@
       tp: tp.toFixed(4),
       sl: sl.toFixed(4),
       leverage: leverage + "x",
-      pop: pop < 0 ? 0 : pop, // Ensure pop isn't negative
+      pop: pop < 0 ? 0 : pop,
       rsi: Number.isFinite(latestRSI5m) ? latestRSI5m : 0, 
       estimated_profit: (signalType.includes("Sell") ? Math.abs(profitPct) : profitPct).toFixed(2) + "%",
       signal: signalType,
       volProfile: volProfileScores,
-      indicators: { // Continue to provide all indicators for backtesting
+      indicators: { 
         rsi5m: latestRSI5m,
         macd5m: macdObj5m.latest,
         boll5m: boll5m,
         cci5m: latestCCI5m,
         volProfile: volProfileScores,
         marketTrend: marketTrend,
-        // Add any other indicators you wish to track here
         ema50_5m: latestEMA50_5m,
         adx5m: latestADX5m,
       }
     };
 }
- 
   
   // --- Replacement Indicator Functions ---
 
@@ -1057,6 +1045,7 @@ function calcVolumeProfile(closes, highs, lows, volumes, numNodes = 10) {
 </script>
 </body>
 </html>
+
 
 
 
