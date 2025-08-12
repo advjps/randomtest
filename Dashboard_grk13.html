@@ -287,26 +287,46 @@
       sellScore -= 45; vetoApplied = true;
     }
 
-    // --- 4. FINAL SIGNAL DETERMINATION ---
-    const totalScore = buyScore - sellScore;
+   // --- 4. FINAL SIGNAL DETERMINATION (V2.3 Complete) ---
     let signalType = "Neutral";
     let pop = 0;
+    const STRONG_THRESHOLD = 25;
 
-    const STRONG_BUY_THRESHOLD = 25;
-    const STRONG_SELL_THRESHOLD = -25;
+    // First, determine the direction based on which score is higher
+    if (buyScore > sellScore) { // Bullish case
+        if (buyScore >= STRONG_THRESHOLD) {
+            signalType = "Strong Buy";
+        } else if (buyScore > 0) { // A buy signal is only possible if the buyScore is positive
+            signalType = "Buy";
+        }
+    } else if (sellScore > buyScore) { // Bearish case
+        if (sellScore >= STRONG_THRESHOLD) {
+            signalType = "Strong Sell";
+        } else if (sellScore > 0) { // A sell signal is only possible if the sellScore is positive
+            signalType = "Sell";
+        }
+    }
 
-    if (totalScore >= STRONG_BUY_THRESHOLD) { signalType = "Strong Buy"; } 
-    else if (totalScore <= STRONG_SELL_THRESHOLD) { signalType = "Strong Sell"; } 
-    else if (totalScore > 0) { signalType = "Buy"; } 
-    else if (totalScore < 0) { signalType = "Sell"; }
-    
+    // Downgrade penalized signals from "Strong" status
     if (vetoApplied && (signalType.includes("Strong"))) {
         signalType = (signalType === "Strong Buy") ? "Buy" : "Sell";
     }
 
+    // Calculate POP score based on the final scores
+    if (signalType.includes("Buy")) {
+        pop = Math.min(100, Math.round((buyScore / (buyScore + sellScore || 1)) * 100));
+    } else if (signalType.includes("Sell")) {
+        pop = Math.min(100, Math.round((sellScore / (buyScore + sellScore || 1)) * 100));
+    } else {
+        pop = 50;
+    }
+    pop = pop < 0 ? 0 : pop; // Ensure pop is never negative
+
     // TP/SL and Leverage must be calculated before the final profit filter
     let leverage = 5;
-    if (pop >= 80) leverage = 9; else if (pop >= 65) leverage = 7; else if (pop >= 50) leverage = 6;
+    if (pop >= 80) leverage = 9;
+    else if (pop >= 65) leverage = 7;
+    else if (pop >= 50) leverage = 6;
     
     const effectiveATR = (Number.isFinite(atr) && atr > 0) ? atr : currentPrice * 0.002;
     let tp, sl;
@@ -320,7 +340,7 @@
       tp = currentPrice; sl = currentPrice;
     }
     const profitPct = Math.abs(((tp - currentPrice) / currentPrice) * 100 * leverage);
-
+     
     // --- 5. FINAL VETO FILTER BASED ON PROFIT % ---
     if (profitPct > 7.0 && signalType.includes("Strong")) {
       signalType = "Neutral"; // Veto the signal if estimated profit is too high
@@ -1011,6 +1031,7 @@ function calcVolumeProfile(closes, highs, lows, volumes, numNodes = 10) {
 </script>
 </body>
 </html>
+
 
 
 
