@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CoinDCX USDT Futures RSI Scanner</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        th, td {
+            padding: 10px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+        th {
+            background-color: #007bff;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        .loading, .error {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 18px;
+        }
+        .loading {
+            color: #007bff;
+        }
+        .error {
+            color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <h1>CoinDCX USDT Futures RSI Scanner</h1>
+    <div id="loading" class="loading">Loading data...</div>
+    <div id="error" class="error" style="display: none;"></div>
+    <table id="rsiTable" style="display: none;">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Current Price (USDT)</th>
+                <th>Volume (1-min)</th>
+                <th>24h Price Change (%)</th>
+                <th>RSI (1-min)</th>
+                <th>RSI (5-min)</th>
+                <th>RSI (15-min)</th>
+                <th>RSI (1-hour)</th>
+                <th>RSI (1-day)</th>
+            </tr>
+        </thead>
+        <tbody id="rsiTableBody"></tbody>
+    </table>
+
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+    <script>
+        // Function to calculate RSI (14-period)
+        function calculateRSI(closes, period = 14) {
+            if (closes.length < period + 1) return null;
+            let gains = 0, losses = 0;
+            for (let i = 1; i <= period; i++) {
+                const diff = closes[i] - closes[i - 1];
+                if (diff > 0) gains += diff;
+                else losses -= diff;
+            }
+            let avgGain = gains / period;
+            let avgLoss = losses / period;
+            for (let i = period + 1; i < closes.length; i++) {
+                const diff = closes[i] - closes[i - 1];
+                const gain = diff > 0 ? diff : 0;
+                const loss = diff < 0 ? -diff : 0;
+                avgGain = (avgGain * (period - 1) + gain) / period;
+                avgLoss = (avgLoss * (period - 1) + loss) / period;
+            }
+            if (avgLoss === 0) return avgGain === 0 ? null : 100;
+            const rs = avgGain / avgLoss;
+            return 100 - (100 / (1 + rs));
+        }
+
+        // Function to fetch candlestick data
+        async function fetchCandles(pair, timeframe, limit = 50) {
+            try {
+                const endTime = moment().unix() * 1000;
+                const response = await axios.get(`https://public.coindcx.com/market_data/candles`, {
+                    params: {
+                        pair: pair,
+                        interval: timeframe,
+                        endTime: endTime,
+                        limit: limit
+                    }
+                });
+                return response.data.reverse(); // Reverse to get oldest to newest
+            } catch (error) {
+                console.error(`Error fetching candles for ${pair} (${timeframe}):`, error.message);
+                return null;
+            }
+        }
+
+        // Function to fetch market data
+        async function fetchMarketData() {
+            try {
+                const response = await axios.get('https://api.coindcx.com/exchange/v1/market_details');
+                return response.data.filter(pair => pair.pair.includes('_USDT') && pair.pair.startsWith('B-') && pair.status === 'Active');
+            } catch (error) {
+                console.error('Error fetching market details:', error.message);
+                return [];
+            }
+        }
+
+        // Function to fetch ticker data
+        async function fetchTickerData() {
+            try {
+                const response = await axios.get('https://api.coindcx.com/exchange/ticker');
+                return response.data;
+            } catch (error) {
+                console.error('Error fetching ticker data:', error.message);
+                return [];
+            }
+        }
+
+        // Delay function to avoid rate limits
+        function delay(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // Main function to process and display data
+        async function loadRSIData() {
+            const loadingDiv = document.getElementById('loading');
+            const errorDiv = document.getElementById('error');
+            const table = document.getElementById('rsiTable');
+            const tableBody = document.getElementById('rsiTableBody');
+
+            try {
+                // Fetch market and ticker data
+                const markets = await fetchMarketData();
+                const tickerData = await fetchTickerData();
+                const results = [];
+
+                // Process each USDT futures pair
+                for (const market of markets) {
+                    const pair = market.pair; // e.g., B-BTC_USDT
+                    const symbol = market.target_currency_short_name; // e.g., BTC
+
+                    // Fetch candlestick data for all timeframes
+                    const timeframes = {
+                        '1m': '1m',
+                        '5m': '5m',
+                        '15m': '15m',
+                        '1h': '1h',
+                        '1d': '1d'
+                    };
+                    const candles = {};
+                    let volume = 0;
+
+                    for (const [key, interval] of Object.entries(timeframes)) {
+                        const data = await fetchCandles(pair, interval);
+                        if (data && data.length > 14) {
+                            candles[key] = data;
+                            if (key === '1m' && data.length > 0) {
+                                volume = data[data.length - 1].volume || 0;
+                            }
+                        } else {
+                            candles[key] = null;
+                        }
+                        await delay(500); // Avoid rate limits
+                    }
+
+                    // Calculate RSI for each timeframe
+                    const rsiValues = {};
+                    for (const [key, data] of Object.entries(candles)) {
+                        if (data) {
+                            const closes = data.map(candle => parseFloat(candle.close));
+                            rsiValues[key] = calculateRSI(closes);
+                        } else {
+                            rsiValues[key] = null;
+                        }
+                    }
+
+                    // Filter for RSI (1-min) > 70 or < 30
+                    if (rsiValues['1m'] !== null && (rsiValues['1m'] > 70 || rsiValues['1m'] < 30)) {
+                        // Find ticker data for current price and 24h change
+                        const ticker = tickerData.find(t => t.market === pair);
+                        const currentPrice = ticker ? parseFloat(ticker.last_price) : null;
+                        const priceChange = ticker && ticker.change_24_hour ? parseFloat(ticker.change_24_hour) : null;
+
+                        results.push({
+                            name: symbol,
+                            currentPrice,
+                            volume,
+                            priceChange,
+                            rsi1m: rsiValues['1m'],
+                            rsi5m: rsiValues['5m'],
+                            rsi15m: rsiValues['15m'],
+                            rsi1h: rsiValues['1h'],
+                            rsi1d: rsiValues['1d']
+                        });
+                    }
+                }
+
+                // Sort by 1-hour RSI in descending order
+                results.sort((a, b) => (b.rsi1h || 0) - (a.rsi1h || 0));
+
+                // Populate table
+                tableBody.innerHTML = '';
+                results.forEach(result => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${result.name || '-'}</td>
+                        <td>${result.currentPrice ? result.currentPrice.toFixed(4) : '-'}</td>
+                        <td>${result.volume ? result.volume.toFixed(2) : '-'}</td>
+                        <td>${result.priceChange ? result.priceChange.toFixed(2) + '%' : '-'}</td>
+                        <td>${result.rsi1m ? result.rsi1m.toFixed(2) : '-'}</td>
+                        <td>${result.rsi5m ? result.rsi5m.toFixed(2) : '-'}</td>
+                        <td>${result.rsi15m ? result.rsi15m.toFixed(2) : '-'}</td>
+                        <td>${result.rsi1h ? result.rsi1h.toFixed(2) : '-'}</td>
+                        <td>${result.rsi1d ? result.rsi1d.toFixed(2) : '-'}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+
+                // Show table, hide loading
+                loadingDiv.style.display = 'none';
+                table.style.display = 'table';
+            } catch (error) {
+                console.error('Error loading RSI data:', error.message);
+                errorDiv.textContent = 'Error loading data. Please try again later.';
+                errorDiv.style.display = 'block';
+                loadingDiv.style.display = 'none';
+            }
+        }
+
+        // Load data on page load
+        window.onload = loadRSIData;
+    </script>
+</body>
+</html>
