@@ -1,6 +1,26 @@
-RSI.html:1 Access to XMLHttpRequest at 'https://api.coindcx.com/exchange/v1/market_details' from origin 'https://advjps.github.io' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
-RSI.html:176 Error fetching market details: Network Error
-fetchMarketData @ RSI.html:176
-RSI.html:337 Error loading RSI data: No USDT futures pairs found
-loadRSIData @ RSI.html:337
-api.coindcx.com/exchange/v1/market_details:1  Failed to load resource: net::ERR_FAILED
+favicon.ico:1  GET https://advjps.github.io/favicon.ico 404 (Not Found)
+RSI.html:1 Access to XMLHttpRequest at 'https://cors.isomorphic-git.org/https://api.coindcx.com/exchange/v1/market_details' from origin 'https://advjps.github.io' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+RSI.html:161 Error fetching market details: Network Error
+fetchMarketData @ RSI.html:161
+await in fetchMarketData
+loadRSIData @ RSI.html:203
+RSI.html:319 Error loading RSI data: No USDT futures pairs found
+loadRSIData @ RSI.html:319
+xhr.js:195  GET https://cors.isomorphic-git.org/https://api.coindcx.com/exchange/v1/market_details net::ERR_FAILED 403 (Forbidden)
+(anonymous) @ xhr.js:195
+xhr @ xhr.js:15
+_t @ dispatchRequest.js:51
+value @ Axios.js:187
+(anonymous) @ Axios.js:40
+p @ axios.min.js:2
+(anonymous) @ axios.min.js:2
+(anonymous) @ axios.min.js:2
+p @ axios.min.js:2
+a @ axios.min.js:2
+(anonymous) @ axios.min.js:2
+(anonymous) @ axios.min.js:2
+(anonymous) @ Axios.js:63
+ye.forEach.qt.<computed> @ Axios.js:213
+(anonymous) @ bind.js:5
+fetchMarketData @ RSI.html:155
+loadRSIData @ RSI.html:203
