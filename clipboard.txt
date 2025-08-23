@@ -1,0 +1,6 @@
+RSI.html:1 Access to XMLHttpRequest at 'https://api.coindcx.com/exchange/v1/market_details' from origin 'https://advjps.github.io' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+RSI.html:176 Error fetching market details: Network Error
+fetchMarketData @ RSI.html:176
+RSI.html:337 Error loading RSI data: No USDT futures pairs found
+loadRSIData @ RSI.html:337
+api.coindcx.com/exchange/v1/market_details:1  Failed to load resource: net::ERR_FAILED
