@@ -3,328 +3,289 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CoinDCX USDT Futures RSI Scanner</title>
+    <title>Binance Futures RSI Dashboard</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #f4f4f4;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: auto;
         }
         h1 {
             text-align: center;
-            color: #333;
+            color: #00b894;
         }
-        .controls {
-            text-align: center;
+        .controls, .info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             margin-bottom: 20px;
+            flex-wrap: wrap;
         }
-        select {
-            padding: 5px;
-            margin: 5px;
-            font-size: 16px;
+        .controls select, .controls button {
+            background-color: #2d2d2d;
+            color: #e0e0e0;
+            border: 1px solid #444;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 14px;
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
-            background-color: #fff;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            font-size: 14px;
         }
         th, td {
+            border: 1px solid #333;
             padding: 10px;
-            text-align: center;
-            border: 1px solid #ddd;
+            text-align: right;
         }
         th {
-            background-color: #007bff;
-            color: white;
+            background-color: #1e1e1e;
+            color: #00b894;
         }
-        tr:nth-child(even) {
-            background-color: #f9f9f9;
+        td:first-child, th:first-child {
+            text-align: left;
+            font-weight: bold;
         }
-        tr:hover {
-            background-color: #f1f1f1;
-        }
-        .rsi-1m {
-            background-color: #90EE90; /* Light green for 1-min RSI */
-        }
-        .loading, .error {
+        .rsi-oversold { background-color: rgba(46, 204, 113, 0.3); }
+        .rsi-overbought { background-color: rgba(231, 76, 60, 0.3); }
+        .loader {
             text-align: center;
-            margin-top: 20px;
+            padding: 30px;
             font-size: 18px;
         }
-        .loading {
-            color: #007bff;
-        }
-        .error {
-            color: #dc3545;
+        a {
+            color: #00b894;
+            text-decoration: none;
         }
     </style>
 </head>
 <body>
-    <h1>CoinDCX USDT Futures RSI Scanner</h1>
-    <div class="controls">
-        <label for="sortBy">Sort By:</label>
-        <select id="sortBy">
-            <option value="rsi1m">RSI (1-min)</option>
-            <option value="rsi5m">RSI (5-min)</option>
-            <option value="rsi15m">RSI (15-min)</option>
-            <option value="rsi1h" selected>RSI (1-hour)</option>
-            <option value="rsi1d">RSI (1-day)</option>
-        </select>
-        <label for="sortOrder">Order:</label>
-        <select id="sortOrder">
-            <option value="desc" selected>Descending</option>
-            <option value="asc">Ascending</option>
-        </select>
+
+    <div class="container">
+        <h1>Binance Futures RSI Dashboard</h1>
+
+        <div class="controls">
+            <div>
+                <label for="sort-by">Sort By: </label>
+                <select id="sort-by">
+                    <option value="rsi1m" selected>RSI 1 min Candles</option>
+                    <option value="coinName">Coin Name</option>
+                    <option value="price">Current Price</option>
+                    <option value="volume">24h Volume</option>
+                    <option value="change">24h Change</option>
+                    <option value="rsi5m">RSI 5 min Candles</option>
+                    <option value="rsi15m">RSI 15 min Candles</option>
+                    <option value="rsi1d">RSI 1 day Candles</option>
+                </select>
+                <select id="sort-order">
+                    <option value="desc" selected>Descending</option>
+                    <option value="asc">Ascending</option>
+                </select>
+            </div>
+            <div class="info">
+                <span id="last-updated">Last Updated: N/A</span>
+            </div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Coin Name</th>
+                    <th>Current Price</th>
+                    <th>24h Volume (USDT)</th>
+                    <th>24h Change (%)</th>
+                    <th>RSI 1 min Candles</th>
+                    <th>RSI 5 min Candles</th>
+                    <th>RSI 15 min Candles</th>
+                    <th>RSI 1 day Candles</th>
+                </tr>
+            </thead>
+            <tbody id="data-table-body">
+                <tr>
+                    <td colspan="8" class="loader">Loading market data...</td>
+                </tr>
+            </tbody>
+        </table>
     </div>
-    <div id="loading" class="loading">Loading data...</div>
-    <div id="error" class="error" style="display: none;"></div>
-    <table id="rsiTable" style="display: none;">
-        <thead>
-            <tr>
-                <th>Name</th>
-                <th>Current Price (USDT)</th>
-                <th>Volume (1-min)</th>
-                <th>24h Price Change (%)</th>
-                <th class="rsi-1m">RSI (1-min)</th>
-                <th>RSI (5-min)</th>
-                <th>RSI (15-min)</th>
-                <th>RSI (1-hour)</th>
-                <th>RSI (1-day)</th>
-            </tr>
-        </thead>
-        <tbody id="rsiTableBody"></tbody>
-    </table>
 
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
     <script>
-        // CORS proxy base URL
-        const corsProxy = 'https://cors.isomorphic-git.org/';
+        // --- CONFIGURATION ---
+        const API_BASE = "https://fapi.binance.com";
+        const MIN_VOLUME_USDT = 100_000_000;
+        const RSI_PERIOD = 14;
+        const RSI_UPPER = 65;
+        const RSI_LOWER = 30;
+        const REFRESH_INTERVAL_MS = 60000; // 60 seconds
 
-        // Function to calculate RSI (14-period)
-        function calculateRSI(closes, period = 14) {
-            if (!closes || closes.length < period + 1) return null;
-            let gains = 0, losses = 0;
-            for (let i = 1; i <= period; i++) {
+        // --- PROXY CONFIGURATION (from your snippet) ---
+        const USE_PROXY = true; // Set to true to enable the CORS proxy
+        const PROXY = "https://cors.isomorphic-git.org/";
+
+        let marketData = [];
+
+        const sortBySelect = document.getElementById('sort-by');
+        const sortOrderSelect = document.getElementById('sort-order');
+        const tableBody = document.getElementById('data-table-body');
+        const lastUpdatedEl = document.getElementById('last-updated');
+
+        // --- API & CALCULATION FUNCTIONS ---
+
+        // Simple fetch wrapper with proxy support
+        async function apiFetch(endpoint, params) {
+            let url = API_BASE + endpoint;
+            if (params) {
+                const searchParams = new URLSearchParams(params).toString();
+                url += `?${searchParams}`;
+            }
+
+            const finalUrl = USE_PROXY ? PROXY + url : url;
+            
+            const response = await fetch(finalUrl);
+            if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
+            return response.json();
+        }
+        
+        // Custom RMA-based RSI calculation to match TradingView/Binance
+        function calculateRSI(closes) {
+            if (closes.length <= RSI_PERIOD) return null;
+            let gains = 0;
+            let losses = 0;
+
+            for (let i = 1; i <= RSI_PERIOD; i++) {
                 const diff = closes[i] - closes[i - 1];
                 if (diff > 0) gains += diff;
                 else losses -= diff;
             }
-            let avgGain = gains / period;
-            let avgLoss = losses / period;
-            for (let i = period + 1; i < closes.length; i++) {
+
+            let avgGain = gains / RSI_PERIOD;
+            let avgLoss = losses / RSI_PERIOD;
+
+            for (let i = RSI_PERIOD + 1; i < closes.length; i++) {
                 const diff = closes[i] - closes[i - 1];
-                const gain = diff > 0 ? diff : 0;
-                const loss = diff < 0 ? -diff : 0;
-                avgGain = (avgGain * (period - 1) + gain) / period;
-                avgLoss = (avgLoss * (period - 1) + loss) / period;
+                let gain = (diff > 0) ? diff : 0;
+                let loss = (diff < 0) ? -diff : 0;
+                
+                avgGain = (avgGain * (RSI_PERIOD - 1) + gain) / RSI_PERIOD;
+                avgLoss = (avgLoss * (RSI_PERIOD - 1) + loss) / RSI_PERIOD;
             }
-            if (avgLoss === 0) return avgGain === 0 ? null : 100;
+
+            if (avgLoss === 0) return 100;
             const rs = avgGain / avgLoss;
             return 100 - (100 / (1 + rs));
         }
 
-        // Function to fetch candlestick data with retry logic
-        async function fetchCandles(pair, timeframe, limit = 50, retries = 3) {
-            for (let attempt = 1; attempt <= retries; attempt++) {
-                try {
-                    const endTime = moment().unix() * 1000;
-                    const response = await axios.get(`${corsProxy}https://public.coindcx.com/market_data/candles`, {
-                        params: { pair, interval: timeframe, endTime, limit },
-                        timeout: 10000
-                    });
-                    console.log(`Fetched candles for ${pair} (${timeframe})`);
-                    return response.data.reverse();
-                } catch (error) {
-                    console.error(`Attempt ${attempt} failed for ${pair} (${timeframe}): ${error.message}`);
-                    if (attempt < retries && error.response?.status === 429) {
-                        await delay(2000 * attempt); // Increased delay for rate limits
-                    } else if (attempt === retries) {
-                        console.error(`Max retries reached for ${pair} (${timeframe})`);
-                        return null;
-                    }
+        async function fetchRSI(symbol, interval) {
+            const klines = await apiFetch('/fapi/v1/klines', { symbol, interval, limit: 100 });
+            const closes = klines.map(k => parseFloat(k[4])); // Index 4 is the close price
+            const rsi = calculateRSI(closes);
+            return { rsi };
+        }
+
+        // --- UI & RENDERING FUNCTIONS ---
+        function renderTable() {
+            if (marketData.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="8" class="loader">No coins currently meet the criteria.</td></tr>`;
+                return;
+            }
+
+            const sortBy = sortBySelect.value;
+            const sortOrder = sortOrderSelect.value;
+
+            const sortedData = [...marketData].sort((a, b) => {
+                let valA = a[sortBy];
+                let valB = b[sortBy];
+
+                if (typeof valA === 'string') {
+                    return sortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+                } else {
+                    return sortOrder === 'asc' ? valA - valB : valB - valA;
                 }
-            }
-        }
+            });
 
-        // Function to fetch market data
-        async function fetchMarketData() {
-            try {
-                const response = await axios.get(`${corsProxy}https://api.coindcx.com/exchange/v1/market_details`, { timeout: 10000 });
-                console.log(`Raw market data: ${JSON.stringify(response.data.slice(0, 5))}`);
-                const markets = response.data.filter(pair => pair.pair.includes('_USDT') && pair.status === 'Active');
-                console.log(`Filtered ${markets.length} USDT pairs: ${markets.map(p => p.pair).join(', ')}`);
-                return markets.slice(0, 5); // Limit to 5 pairs for testing
-            } catch (error) {
-                console.error('Error fetching market details:', error.message);
-                return [];
-            }
-        }
+            tableBody.innerHTML = '';
+            sortedData.forEach(coin => {
+                const row = document.createElement('tr');
+                const rsiClass = coin.rsi1m >= RSI_UPPER ? 'rsi-overbought' : (coin.rsi1m <= RSI_LOWER ? 'rsi-oversold' : '');
+                
+                const formatVolume = (vol) => {
+                    if (vol >= 1_000_000_000) return `${(vol / 1_000_000_000).toFixed(2)}B`;
+                    if (vol >= 1_000_000) return `${(vol / 1_000_000).toFixed(2)}M`;
+                    return vol.toLocaleString();
+                };
 
-        // Function to fetch ticker data
-        async function fetchTickerData() {
-            try {
-                const response = await axios.get(`${corsProxy}https://api.coindcx.com/exchange/ticker`, { timeout: 10000 });
-                console.log('Fetched ticker data');
-                return response.data;
-            } catch (error) {
-                console.error('Error fetching ticker data:', error.message);
-                return [];
-            }
-        }
-
-        // Delay function for rate limit mitigation
-        function delay(ms) {
-            return new Promise(resolve => setTimeout(resolve, ms));
-        }
-
-        // Function to sort results
-        function sortResults(results, sortBy, sortOrder) {
-            return results.sort((a, b) => {
-                const aValue = a[sortBy] || 0;
-                const bValue = b[sortBy] || 0;
-                return sortOrder === 'desc' ? bValue - aValue : aValue - bValue;
+                row.innerHTML = `
+                    <td><a href="https://www.binance.com/en/futures/${coin.coinName}" target="_blank">${coin.coinName}</a></td>
+                    <td>${coin.price.toFixed(4)}</td>
+                    <td>${formatVolume(coin.volume)}</td>
+                    <td>${coin.change.toFixed(2)}%</td>
+                    <td class="${rsiClass}">${coin.rsi1m.toFixed(2)}</td>
+                    <td>${coin.rsi5m ? coin.rsi5m.toFixed(2) : 'N/A'}</td>
+                    <td>${coin.rsi15m ? coin.rsi15m.toFixed(2) : 'N/A'}</td>
+                    <td>${coin.rsi1d ? coin.rsi1d.toFixed(2) : 'N/A'}</td>
+                `;
+                tableBody.appendChild(row);
             });
         }
 
-        // Main function to process and display data
-        async function loadRSIData() {
-            const loadingDiv = document.getElementById('loading');
-            const errorDiv = document.getElementById('error');
-            const table = document.getElementById('rsiTable');
-            const tableBody = document.getElementById('rsiTableBody');
-            const sortBySelect = document.getElementById('sortBy');
-            const sortOrderSelect = document.getElementById('sortOrder');
-
+        // --- MAIN APPLICATION LOGIC ---
+        async function updateDashboard() {
             try {
-                loadingDiv.textContent = 'Fetching market data...';
-                const markets = await fetchMarketData();
-                if (markets.length === 0) {
-                    throw new Error('No USDT futures pairs found');
-                }
+                const allTickers = await apiFetch('/fapi/v1/ticker/24hr');
+                const highVolumeTickers = allTickers.filter(t => parseFloat(t.quoteVolume) >= MIN_VOLUME_USDT && t.symbol.endsWith('USDT'));
+                
+                console.log(`Found ${highVolumeTickers.length} high-volume markets. Scanning...`);
+                
+                let freshData = [];
+                for (const ticker of highVolumeTickers) {
+                    const { rsi: rsi1m } = await fetchRSI(ticker.symbol, '1m');
+                    
+                    if (rsi1m !== null && (rsi1m >= RSI_UPPER || rsi1m <= RSI_LOWER)) {
+                        console.log(`HIT: ${ticker.symbol} with 1-min RSI of ${rsi1m.toFixed(2)}. Fetching other timeframes...`);
+                        
+                        const [{rsi: rsi5m}, {rsi: rsi15m}, {rsi: rsi1d}] = await Promise.all([
+                            fetchRSI(ticker.symbol, '5m'),
+                            fetchRSI(ticker.symbol, '15m'),
+                            fetchRSI(ticker.symbol, '1d')
+                        ]);
 
-                loadingDiv.textContent = 'Fetching ticker data...';
-                const tickerData = await fetchTickerData();
-
-                const results = [];
-                let processed = 0;
-
-                for (const market of markets) {
-                    processed++;
-                    loadingDiv.textContent = `Processing pair ${processed}/${markets.length}: ${market.pair}...`;
-                    const pair = market.pair;
-                    const symbol = market.target_currency_short_name || market.pair.split('_')[0];
-
-                    // Fetch candlestick data for all timeframes
-                    const timeframes = {
-                        '1m': '1m',
-                        '5m': '5m',
-                        '15m': '15m',
-                        '1h': '1h',
-                        '1d': '1d'
-                    };
-                    const candles = {};
-                    let volume = 0;
-
-                    for (const [key, interval] of Object.entries(timeframes)) {
-                        const data = await fetchCandles(pair, interval);
-                        if (data && data.length > 14) {
-                            candles[key] = data;
-                            if (key === '1m' && data.length > 0) {
-                                volume = data[data.length - 1].volume || 0;
-                            }
-                        } else {
-                            candles[key] = null;
-                        }
-                        await delay(2000); // Increased delay to avoid rate limits
-                    }
-
-                    // Calculate RSI for each timeframe
-                    const rsiValues = {};
-                    for (const [key, data] of Object.entries(candles)) {
-                        if (data) {
-                            const closes = data.map(candle => parseFloat(candle.close));
-                            rsiValues[key] = calculateRSI(closes);
-                        } else {
-                            rsiValues[key] = null;
-                        }
-                    }
-
-                    // Filter for RSI (1-min) > 60 or < 30
-                    if (rsiValues['1m'] !== null && (rsiValues['1m'] > 60 || rsiValues['1m'] < 30)) {
-                        const ticker = tickerData.find(t => t.market === pair);
-                        const currentPrice = ticker ? parseFloat(ticker.last_price) : null;
-                        const priceChange = ticker && ticker.change_24_hour ? parseFloat(ticker.change_24_hour) : null;
-
-                        results.push({
-                            name: symbol,
-                            currentPrice,
-                            volume,
-                            priceChange,
-                            rsi1m: rsiValues['1m'],
-                            rsi5m: rsiValues['5m'],
-                            rsi15m: rsiValues['15m'],
-                            rsi1h: rsiValues['1h'],
-                            rsi1d: rsiValues['1d']
+                        freshData.push({
+                            coinName: ticker.symbol,
+                            price: parseFloat(ticker.lastPrice),
+                            volume: parseFloat(ticker.quoteVolume),
+                            change: parseFloat(ticker.priceChangePercent),
+                            rsi1m: rsi1m,
+                            rsi5m: rsi5m,
+                            rsi15m: rsi15m,
+                            rsi1d: rsi1d
                         });
                     }
                 }
+                marketData = freshData;
+                renderTable();
 
-                // Initial sort
-                const initialSortBy = sortBySelect.value;
-                const initialSortOrder = sortOrderSelect.value;
-                sortResults(results, initialSortBy, initialSortOrder);
-
-                // Populate table
-                function populateTable(results) {
-                    tableBody.innerHTML = '';
-                    if (results.length === 0) {
-                        tableBody.innerHTML = '<tr><td colspan="9">No pairs with RSI (1-min) > 60 or < 30 found</td></tr>';
-                    } else {
-                        results.forEach(result => {
-                            const row = document.createElement('tr');
-                            row.innerHTML = `
-                                <td>${result.name || '-'}</td>
-                                <td>${result.currentPrice ? result.currentPrice.toFixed(4) : '-'}</td>
-                                <td>${result.volume ? result.volume.toFixed(2) : '-'}</td>
-                                <td>${result.priceChange ? result.priceChange.toFixed(2) + '%' : '-'}</td>
-                                <td class="rsi-1m">${result.rsi1m ? result.rsi1m.toFixed(2) : '-'}</td>
-                                <td>${result.rsi5m ? result.rsi5m.toFixed(2) : '-'}</td>
-                                <td>${result.rsi15m ? result.rsi15m.toFixed(2) : '-'}</td>
-                                <td>${result.rsi1h ? result.rsi1h.toFixed(2) : '-'}</td>
-                                <td>${result.rsi1d ? result.rsi1d.toFixed(2) : '-'}</td>
-                            `;
-                            tableBody.appendChild(row);
-                        });
-                    }
-                }
-                populateTable(results);
-
-                // Add event listeners for sorting
-                sortBySelect.addEventListener('change', () => {
-                    sortResults(results, sortBySelect.value, sortOrderSelect.value);
-                    populateTable(results);
-                });
-                sortOrderSelect.addEventListener('change', () => {
-                    sortResults(results, sortBySelect.value, sortOrderSelect.value);
-                    populateTable(results);
-                });
-
-                // Show table, hide loading
-                loadingDiv.style.display = 'none';
-                table.style.display = 'table';
             } catch (error) {
-                console.error('Error loading RSI data:', error.message);
-                errorDiv.textContent = `Error: ${error.message}. Please check console for details or contact api@coindcx.com.`;
-                errorDiv.style.display = 'block';
-                loadingDiv.style.display = 'none';
+                console.error("Failed to update dashboard:", error);
+                tableBody.innerHTML = `<tr><td colspan="8" class="loader">Error fetching data. Check browser console for details.</td></tr>`;
+            } finally {
+                lastUpdatedEl.textContent = `Last Updated: ${new Date().toLocaleTimeString()}`;
             }
         }
 
-        // Load data on page load
-        window.onload = loadRSIData;
+        // --- INITIALIZATION ---
+        sortBySelect.addEventListener('change', renderTable);
+        sortOrderSelect.addEventListener('change', renderTable);
+        
+        updateDashboard();
+        setInterval(updateDashboard, REFRESH_INTERVAL_MS);
+
     </script>
+
 </body>
 </html>
